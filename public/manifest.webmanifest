@@ -1,0 +1,17 @@
+{
+  "name": "OrthoFlow · 骨科轮转工作助手",
+  "short_name": "OrthoFlow",
+  "description": "骨科轮转医生的移动端工作与学习助手",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f8fa",
+  "theme_color": "#2f6bff",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
