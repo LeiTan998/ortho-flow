@@ -1,5 +1,4 @@
 "use client";
-"use clfromient";
 
 import { supabase } from "@/lib/supabase";
 import { useEffect, useState } from "react";
@@ -30,23 +29,24 @@ export default function Home() {
   useEffect(() => {
     async function loadDiseases() {
       console.log("URL:", process.env.NEXT_PUBLIC_SUPABASE_URL)
-console.log("ANON:", process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
-console.log("supabase 客户端对象:", supabase)
+      console.log("ANON:", process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
+      console.log("supabase 客户端对象:", supabase)
+      
+      // 改动1：删除了 .limit(10)
       const { data, error } = await supabase
-  .from("diseases")
-  .select("*")
-  .limit(10)
+        .from("diseases")
+        .select("*")
 
-  console.log("查询结果 - data:", data)
-console.log("查询结果 - error:", error)
+      console.log("查询结果 - data:", data)
+      console.log("查询结果 - error:", error)
 
       if (error) {
-  console.error("加载失败，详细错误:", error)
-  console.error("错误信息:", error.message)
-  console.error("错误详情:", JSON.stringify(error, null, 2))
-  setLoading(false)
-  return
-}
+        console.error("加载失败，详细错误:", error)
+        console.error("错误信息:", error.message)
+        console.error("错误详情:", JSON.stringify(error, null, 2))
+        setLoading(false)
+        return
+      }
 
       // Supabase 返回的是 { id, data, created_at }，其中 data 字段里才是疾病内容
       const diseases = data.map((item: any) => item.data);
@@ -181,12 +181,12 @@ console.log("查询结果 - error:", error)
           </div>
         )}
 
-        {/* 热门疾病 */}
+        {/* 热门疾病 - 改动2：只显示最新添加的3个，并反转顺序 */}
         {!searchTerm && diseaseList.length > 0 && (
           <div className="mt-8">
             <p className="text-sm text-gray-400 mb-3">热门疾病</p>
             <div className="flex flex-wrap gap-2">
-              {diseaseList.map((disease) => (
+              {diseaseList.slice(-3).reverse().map((disease) => (
                 <button
                   key={disease.id}
                   onClick={() => setSelectedDisease(disease)}
