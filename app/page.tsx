@@ -8,6 +8,9 @@ type DiseaseData = {
   id: string;
   name: string;
   englishName: string;
+  searchKeywords?: string;
+  viewCount: number;
+  createdAt?: string;
   hasClassification: boolean;
   classifications?: any[];
   commonImages?: any[];
@@ -28,17 +31,9 @@ export default function Home() {
   // 从 Supabase 加载数据
   useEffect(() => {
     async function loadDiseases() {
-      console.log("URL:", process.env.NEXT_PUBLIC_SUPABASE_URL)
-      console.log("ANON:", process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
-      console.log("supabase 客户端对象:", supabase)
-      
-      // 改动1：删除了 .limit(10)
       const { data, error } = await supabase
         .from("diseases")
-        .select("*")
-
-      console.log("查询结果 - data:", data)
-      console.log("查询结果 - error:", error)
+        .select("data, view_count, created_at")
 
       if (error) {
         console.error("加载失败，详细错误:", error)
@@ -48,8 +43,12 @@ export default function Home() {
         return
       }
 
-      // Supabase 返回的是 { id, data, created_at }，其中 data 字段里才是疾病内容
-      const diseases = data.map((item: any) => item.data);
+      // 疾病主体保存在 data 中；热度和创建时间保存在表的独立字段中
+      const diseases = (data || []).map((item: any) => ({
+        ...item.data,
+        viewCount: Number(item.view_count || 0),
+        createdAt: item.created_at,
+      }));
       setDiseaseList(diseases);
       setLoading(false);
     }
@@ -57,12 +56,53 @@ export default function Home() {
     loadDiseases();
   }, []);
 
+  // 用户从搜索结果进入疾病详情时，给该疾病的搜索热度加 1。
+  // 点击“热门疾病”本身不计数，避免热门项目因为曝光更多而不断自我强化。
+  const handleOpenDisease = async (disease: DiseaseData, countAsSearch: boolean) => {
+    setSelectedDisease(disease);
+    setCurrentStep(0);
+    setMode("work");
+    setSearchTerm("");
+
+    if (!countAsSearch) return;
+
+    const { error } = await supabase.rpc("increment_disease_view", {
+      p_disease_id: disease.id,
+    });
+
+    if (error) {
+      console.error("记录疾病搜索热度失败:", error);
+      return;
+    }
+
+    setDiseaseList((currentList) =>
+      currentList.map((item) =>
+        item.id === disease.id
+          ? { ...item, viewCount: item.viewCount + 1 }
+          : item
+      )
+    );
+  };
+
   // 搜索过滤
+  const normalizedSearchTerm = searchTerm.trim().toLowerCase();
   const filteredDiseases = diseaseList.filter((d) =>
-    d.name.includes(searchTerm) ||
-    d.englishName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    d.id.includes(searchTerm)
+    d.name.includes(searchTerm.trim()) ||
+    d.englishName.toLowerCase().includes(normalizedSearchTerm) ||
+    d.id.toLowerCase().includes(normalizedSearchTerm) ||
+    (d.searchKeywords || "").toLowerCase().includes(normalizedSearchTerm)
   );
+
+  // 按搜索热度从高到低显示；热度相同时，较新录入的疾病排在前面
+  const popularDiseases = [...diseaseList]
+    .sort((a, b) => {
+      if (b.viewCount !== a.viewCount) {
+        return b.viewCount - a.viewCount;
+      }
+
+      return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+    })
+    .slice(0, 3);
 
   // 如果还在加载
   if (loading) {
@@ -160,7 +200,7 @@ export default function Home() {
             {filteredDiseases.map((disease, index) => (
               <button
                 key={disease.id}
-                onClick={() => setSelectedDisease(disease)}
+                onClick={() => handleOpenDisease(disease, true)}
                 className={`w-full text-left px-6 py-4 hover:bg-blue-50 transition flex items-center justify-between ${
                   index !== filteredDiseases.length - 1 ? "border-b border-gray-100" : ""
                 }`}
@@ -181,15 +221,15 @@ export default function Home() {
           </div>
         )}
 
-        {/* 热门疾病 - 改动2：只显示最新添加的3个，并反转顺序 */}
+        {/* 热门疾病：按照用户从搜索结果进入详情页的次数排序 */}
         {!searchTerm && diseaseList.length > 0 && (
           <div className="mt-8">
             <p className="text-sm text-gray-400 mb-3">热门疾病</p>
             <div className="flex flex-wrap gap-2">
-              {diseaseList.slice(-3).reverse().map((disease) => (
+              {popularDiseases.map((disease) => (
                 <button
                   key={disease.id}
-                  onClick={() => setSelectedDisease(disease)}
+                  onClick={() => handleOpenDisease(disease, false)}
                   className="px-4 py-2 bg-white border border-gray-200 rounded-full text-sm hover:border-blue-400 hover:text-blue-600 transition"
                 >
                   {disease.name}
