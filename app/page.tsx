@@ -33,7 +33,7 @@ export default function Home() {
     async function loadDiseases() {
       const { data, error } = await supabase
         .from("diseases")
-        .select("*")
+        .select("data, view_count, created_at")
 
       if (error) {
         console.error("加载失败，详细错误:", error)
