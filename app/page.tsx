@@ -1,7 +1,7 @@
 "use client";
 
 import { supabase } from "@/lib/supabase";
-import { useEffect, useState } from "react"；
+import { useEffect, useState } from "react";
 
 // 疾病数据类型
 type DiseaseData = {
