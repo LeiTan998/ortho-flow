@@ -1,54 +1,103 @@
 "use client";
 
 import { supabase } from "@/lib/supabase";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
-// 疾病数据类型
+type LearningSummary = {
+  typicalPatients?: string;
+  typicalSymptoms?: string[];
+  keyPoint?: string;
+  differentialDiagnosis?: string[];
+};
+
+type PhysicalExam = {
+  name?: string;
+  target?: string;
+  method?: string;
+  positiveFinding?: string;
+  meaning?: string;
+  imageUrl?: string;
+};
+
+type ImagingGuide = {
+  preferredTests?: string[];
+  readingPoints?: string[];
+  commonPitfalls?: string[];
+};
+
+type DecisionStep = {
+  id?: string | number;
+  question?: string;
+  yes?: string;
+  no?: string;
+  note?: string;
+};
+
+type DecisionFlow = {
+  title?: string;
+  disclaimer?: string;
+  steps?: DecisionStep[];
+};
+
 type DiseaseData = {
   id: string;
   name: string;
   englishName: string;
   searchKeywords?: string;
   viewCount: number;
-  createdAt?: string;
-  hasClassification: boolean;
+  hasClassification?: boolean;
   classifications?: any[];
   commonImages?: any[];
   workflowSteps?: any[];
   quickActions?: any;
   surgeryTable?: any;
   rehabPlan?: any[];
+  learningSummary?: LearningSummary;
+  physicalExams?: PhysicalExam[];
+  imagingGuide?: ImagingGuide;
+  decisionFlow?: DecisionFlow;
 };
+
+const isUsableImageUrl = (url?: string) =>
+  Boolean(
+    url &&
+      /^https?:\/\//i.test(url) &&
+      !url.includes("your-cdn.com") &&
+      !url.includes("example.com")
+  );
 
 export default function Home() {
   const [diseaseList, setDiseaseList] = useState<DiseaseData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedDisease, setSelectedDisease] = useState<DiseaseData | null>(null);
   const [mode, setMode] = useState<"work" | "study">("work");
   const [currentStep, setCurrentStep] = useState(0);
 
-  // 从 Supabase 加载数据
   useEffect(() => {
     async function loadDiseases() {
-      const { data, error } = await supabase
-        .from("diseases")
-        .select("*")
+      setLoading(true);
+      setLoadError("");
+
+      const { data, error } = await supabase.from("diseases").select("*");
 
       if (error) {
-        console.error("加载失败，详细错误:", error)
-        console.error("错误信息:", error.message)
-        console.error("错误详情:", JSON.stringify(error, null, 2))
-        setLoading(false)
-        return
+        console.error("加载疾病失败:", error);
+        setDiseaseList([]);
+        setLoadError(error.message || "疾病数据加载失败");
+        setLoading(false);
+        return;
       }
 
-      // 疾病主体保存在 data 中；热度和创建时间保存在表的独立字段中
-      const diseases = (data || []).map((item: any) => ({
-        ...item.data,
-        viewCount: Number(item.view_count || 0),
-        createdAt: item.created_at,
-      }));
+      const diseases = (data || [])
+        .filter((item: any) => item?.data && typeof item.data === "object")
+        .map((item: any) => ({
+          ...item.data,
+          viewCount: Number(item.view_count || 0),
+        }))
+        .filter((item: any) => item.id && item.name && item.englishName);
+
       setDiseaseList(diseases);
       setLoading(false);
     }
@@ -56,9 +105,10 @@ export default function Home() {
     loadDiseases();
   }, []);
 
-  // 用户从搜索结果进入疾病详情时，给该疾病的搜索热度加 1。
-  // 点击“热门疾病”本身不计数，避免热门项目因为曝光更多而不断自我强化。
-  const handleOpenDisease = async (disease: DiseaseData, countAsSearch: boolean) => {
+  const handleOpenDisease = async (
+    disease: DiseaseData,
+    countAsSearch: boolean
+  ) => {
     setSelectedDisease(disease);
     setCurrentStep(0);
     setMode("work");
@@ -84,58 +134,75 @@ export default function Home() {
     );
   };
 
-  // 搜索过滤
   const normalizedSearchTerm = searchTerm.trim().toLowerCase();
-  const filteredDiseases = diseaseList.filter((d) =>
-    d.name.includes(searchTerm.trim()) ||
-    d.englishName.toLowerCase().includes(normalizedSearchTerm) ||
-    d.id.toLowerCase().includes(normalizedSearchTerm) ||
-    (d.searchKeywords || "").toLowerCase().includes(normalizedSearchTerm)
+
+  const filteredDiseases = diseaseList.filter((disease) => {
+    const chineseName = disease.name || "";
+    const englishName = disease.englishName || "";
+    const id = disease.id || "";
+    const keywords = disease.searchKeywords || "";
+
+    return (
+      chineseName.includes(searchTerm.trim()) ||
+      englishName.toLowerCase().includes(normalizedSearchTerm) ||
+      id.toLowerCase().includes(normalizedSearchTerm) ||
+      keywords.toLowerCase().includes(normalizedSearchTerm)
+    );
+  });
+
+  const popularDiseases = useMemo(
+    () =>
+      [...diseaseList]
+        .sort((a, b) => b.viewCount - a.viewCount)
+        .slice(0, 3),
+    [diseaseList]
   );
 
-  // 按搜索热度从高到低显示；热度相同时，较新录入的疾病排在前面
-  const popularDiseases = [...diseaseList]
-    .sort((a, b) => {
-      if (b.viewCount !== a.viewCount) {
-        return b.viewCount - a.viewCount;
-      }
-
-      return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
-    })
-    .slice(0, 3);
-
-  // 如果还在加载
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex min-h-screen items-center justify-center">
         <div className="text-xl text-gray-500">加载中...</div>
       </div>
     );
   }
 
-  // 如果已选择某个疾病，显示详情页
+  if (loadError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
+        <div className="max-w-xl rounded-2xl border border-red-200 bg-white p-6 shadow-sm">
+          <h1 className="text-lg font-semibold text-red-700">疾病数据加载失败</h1>
+          <p className="mt-3 break-words text-sm text-gray-600">{loadError}</p>
+        </div>
+      </div>
+    );
+  }
+
   if (selectedDisease) {
     return (
       <div className="min-h-screen bg-gray-50">
-        {/* 顶部导航 */}
-        <header className="bg-white border-b sticky top-0 z-10">
-          <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+        <header className="sticky top-0 z-10 border-b bg-white">
+          <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-4">
               <button
                 onClick={() => setSelectedDisease(null)}
-                className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                className="text-sm font-medium text-blue-600 hover:text-blue-800"
               >
                 ← 返回首页
               </button>
               <div>
-                <h1 className="text-xl font-bold text-gray-800">{selectedDisease.name}</h1>
-                <p className="text-sm text-gray-500">{selectedDisease.englishName}</p>
+                <h1 className="text-xl font-bold text-gray-800">
+                  {selectedDisease.name}
+                </h1>
+                <p className="text-sm text-gray-500">
+                  {selectedDisease.englishName}
+                </p>
               </div>
             </div>
+
             <div className="flex gap-2">
               <button
                 onClick={() => setMode("work")}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
                   mode === "work"
                     ? "bg-blue-600 text-white"
                     : "bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -145,7 +212,7 @@ export default function Home() {
               </button>
               <button
                 onClick={() => setMode("study")}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
                   mode === "study"
                     ? "bg-blue-600 text-white"
                     : "bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -157,8 +224,7 @@ export default function Home() {
           </div>
         </header>
 
-        {/* 详情内容 */}
-        <div className="max-w-7xl mx-auto px-4 py-6">
+        <main className="mx-auto max-w-7xl px-4 py-6">
           {mode === "work" ? (
             <WorkMode
               disease={selectedDisease}
@@ -168,46 +234,48 @@ export default function Home() {
           ) : (
             <StudyMode disease={selectedDisease} />
           )}
-        </div>
+        </main>
       </div>
     );
   }
 
-  // 首页：搜索 + 疾病列表
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white">
-      <div className="max-w-3xl mx-auto px-4 py-16">
-        {/* Logo */}
-        <div className="text-center mb-12">
+      <div className="mx-auto max-w-3xl px-4 py-16">
+        <div className="mb-12 text-center">
           <h1 className="text-4xl font-bold text-blue-600">OrthoFlow</h1>
-          <p className="text-gray-500 mt-2">骨科轮转规范化培训工具</p>
+          <p className="mt-2 text-gray-500">骨科轮转规范化培训工具</p>
         </div>
 
-        {/* 搜索框 */}
         <div className="relative">
           <input
             type="text"
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(event) => setSearchTerm(event.target.value)}
             placeholder="搜索疾病名称、英文简称、拼音..."
-            className="w-full px-6 py-4 text-lg rounded-2xl border border-gray-200 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition"
+            className="w-full rounded-2xl border border-gray-200 px-6 py-4 text-lg shadow-sm transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-400"
           />
         </div>
 
-        {/* 搜索匹配列表 */}
         {searchTerm && filteredDiseases.length > 0 && (
-          <div className="mt-4 bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+          <div className="mt-4 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-lg">
             {filteredDiseases.map((disease, index) => (
               <button
                 key={disease.id}
                 onClick={() => handleOpenDisease(disease, true)}
-                className={`w-full text-left px-6 py-4 hover:bg-blue-50 transition flex items-center justify-between ${
-                  index !== filteredDiseases.length - 1 ? "border-b border-gray-100" : ""
+                className={`flex w-full items-center justify-between px-6 py-4 text-left transition hover:bg-blue-50 ${
+                  index !== filteredDiseases.length - 1
+                    ? "border-b border-gray-100"
+                    : ""
                 }`}
               >
                 <div>
-                  <span className="font-medium text-gray-800">{disease.name}</span>
-                  <span className="text-sm text-gray-400 ml-3">{disease.englishName}</span>
+                  <span className="font-medium text-gray-800">
+                    {disease.name}
+                  </span>
+                  <span className="ml-3 text-sm text-gray-400">
+                    {disease.englishName}
+                  </span>
                 </div>
                 <span className="text-gray-400">→</span>
               </button>
@@ -216,21 +284,20 @@ export default function Home() {
         )}
 
         {searchTerm && filteredDiseases.length === 0 && (
-          <div className="mt-4 text-center text-gray-400 py-8">
+          <div className="mt-4 py-8 text-center text-gray-400">
             未找到匹配的疾病
           </div>
         )}
 
-        {/* 热门疾病：按照用户从搜索结果进入详情页的次数排序 */}
         {!searchTerm && diseaseList.length > 0 && (
           <div className="mt-8">
-            <p className="text-sm text-gray-400 mb-3">热门疾病</p>
+            <p className="mb-3 text-sm text-gray-400">热门疾病</p>
             <div className="flex flex-wrap gap-2">
               {popularDiseases.map((disease) => (
                 <button
                   key={disease.id}
                   onClick={() => handleOpenDisease(disease, false)}
-                  className="px-4 py-2 bg-white border border-gray-200 rounded-full text-sm hover:border-blue-400 hover:text-blue-600 transition"
+                  className="rounded-full border border-gray-200 bg-white px-4 py-2 text-sm transition hover:border-blue-400 hover:text-blue-600"
                 >
                   {disease.name}
                 </button>
@@ -239,7 +306,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* 底部统计 */}
         <div className="mt-12 text-center text-sm text-gray-400">
           当前收录 {diseaseList.length} 种骨科疾病
         </div>
@@ -248,24 +314,31 @@ export default function Home() {
   );
 }
 
-// ========== 工作模式组件 ==========
 function WorkMode({ disease, currentStep, setCurrentStep }: any) {
   const steps = disease.workflowSteps || [];
-  const currentTasks = steps[currentStep]?.tasks || [];
+  const safeStep = Math.min(currentStep, Math.max(steps.length - 1, 0));
+  const currentTasks = steps[safeStep]?.tasks || [];
+
+  if (steps.length === 0) {
+    return (
+      <div className="rounded-xl border bg-white p-6 text-gray-500 shadow-sm">
+        该疾病暂无工作流程。
+      </div>
+    );
+  }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-      {/* 左栏：步骤列表 */}
-      <div className="lg:col-span-1 bg-white rounded-xl shadow-sm border p-4">
-        <h3 className="font-semibold text-gray-700 mb-3 text-sm">工作流程</h3>
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
+      <div className="rounded-xl border bg-white p-4 shadow-sm lg:col-span-1">
+        <h3 className="mb-3 text-sm font-semibold text-gray-700">工作流程</h3>
         <div className="space-y-1">
           {steps.map((step: any, index: number) => (
             <button
-              key={step.stepId}
+              key={step.stepId ?? index}
               onClick={() => setCurrentStep(index)}
-              className={`w-full text-left px-3 py-2 rounded-lg text-sm transition ${
-                index === currentStep
-                  ? "bg-blue-50 text-blue-700 font-medium border-l-4 border-blue-600"
+              className={`w-full rounded-lg px-3 py-2 text-left text-sm transition ${
+                index === safeStep
+                  ? "border-l-4 border-blue-600 bg-blue-50 font-medium text-blue-700"
                   : "text-gray-600 hover:bg-gray-50"
               }`}
             >
@@ -275,28 +348,26 @@ function WorkMode({ disease, currentStep, setCurrentStep }: any) {
         </div>
       </div>
 
-      {/* 中栏：步骤详情 */}
-      <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border p-6">
-        <h3 className="font-semibold text-gray-800 mb-3">
-          第 {currentStep + 1} / {steps.length} 步
+      <div className="rounded-xl border bg-white p-6 shadow-sm lg:col-span-2">
+        <h3 className="mb-3 font-semibold text-gray-800">
+          第 {safeStep + 1} / {steps.length} 步
         </h3>
-        <h4 className="text-xl font-bold text-gray-800 mb-4">
-          {steps[currentStep]?.title || "未命名"}
+        <h4 className="mb-4 text-xl font-bold text-gray-800">
+          {steps[safeStep]?.title || "未命名"}
         </h4>
         <div className="space-y-2">
-          {currentTasks.map((task: string, i: number) => (
-            <div key={i} className="flex items-start gap-3 text-gray-700">
-              <span className="text-blue-500 font-bold text-sm">{i + 1}</span>
+          {currentTasks.map((task: string, index: number) => (
+            <div key={index} className="flex items-start gap-3 text-gray-700">
+              <span className="text-sm font-bold text-blue-500">{index + 1}</span>
               <span>{task}</span>
             </div>
           ))}
         </div>
       </div>
 
-      {/* 右栏：快速操作 */}
-      <div className="lg:col-span-1 space-y-3">
-        <h3 className="font-semibold text-gray-700 text-sm">快速操作</h3>
-        {disease.quickActions && (
+      <div className="space-y-3 lg:col-span-1">
+        <h3 className="text-sm font-semibold text-gray-700">快速操作</h3>
+        {disease.quickActions ? (
           <>
             <QuickActionCard
               title="写病历"
@@ -315,27 +386,18 @@ function WorkMode({ disease, currentStep, setCurrentStep }: any) {
               content={disease.quickActions.emergencyHandling || "暂无模板"}
             />
           </>
+        ) : (
+          <div className="rounded-xl border bg-white p-4 text-sm text-gray-500 shadow-sm">
+            暂无快速操作模板。
+          </div>
         )}
       </div>
     </div>
   );
 }
 
-// ========== 快速操作卡片 ==========
 function QuickActionCard({ title, content }: { title: string; content: string }) {
   const [expanded, setExpanded] = useState(false);
-
-  const handleCopy = (text: string) => {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(() => {
-        alert("已复制到剪贴板");
-      }).catch(() => {
-        fallbackCopy(text);
-      });
-    } else {
-      fallbackCopy(text);
-    }
-  };
 
   const fallbackCopy = (text: string) => {
     const textarea = document.createElement("textarea");
@@ -345,27 +407,41 @@ function QuickActionCard({ title, content }: { title: string; content: string })
     textarea.style.left = "-9999px";
     document.body.appendChild(textarea);
     textarea.select();
+
     try {
       document.execCommand("copy");
       alert("已复制到剪贴板");
     } catch {
       alert("复制失败，请手动选择文本复制");
     }
+
     document.body.removeChild(textarea);
   };
 
+  const handleCopy = (text: string) => {
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard
+        .writeText(text)
+        .then(() => alert("已复制到剪贴板"))
+        .catch(() => fallbackCopy(text));
+    } else {
+      fallbackCopy(text);
+    }
+  };
+
   return (
-    <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+    <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
       <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full px-4 py-3 text-left text-sm font-medium text-gray-700 hover:bg-gray-50 flex justify-between items-center"
+        onClick={() => setExpanded((current) => !current)}
+        className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium text-gray-700 hover:bg-gray-50"
       >
         {title}
         <span>{expanded ? "▲" : "▼"}</span>
       </button>
+
       {expanded && (
         <div className="px-4 pb-4">
-          <pre className="text-xs text-gray-600 whitespace-pre-wrap bg-gray-50 p-3 rounded-lg">
+          <pre className="whitespace-pre-wrap rounded-lg bg-gray-50 p-3 text-xs text-gray-600">
             {content}
           </pre>
           <button
@@ -380,79 +456,484 @@ function QuickActionCard({ title, content }: { title: string; content: string })
   );
 }
 
-// ========== 学习模式组件 ==========
-function StudyMode({ disease }: any) {
+function StudyMode({ disease }: { disease: DiseaseData }) {
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+
+  const summary = disease.learningSummary || {};
+  const symptoms = Array.isArray(summary.typicalSymptoms)
+    ? summary.typicalSymptoms
+    : [];
+  const differentials = Array.isArray(summary.differentialDiagnosis)
+    ? summary.differentialDiagnosis
+    : [];
+  const physicalExams = Array.isArray(disease.physicalExams)
+    ? disease.physicalExams
+    : [];
+  const imagingGuide = disease.imagingGuide || {};
+  const preferredTests = Array.isArray(imagingGuide.preferredTests)
+    ? imagingGuide.preferredTests
+    : [];
+  const readingPoints = Array.isArray(imagingGuide.readingPoints)
+    ? imagingGuide.readingPoints
+    : [];
+  const commonPitfalls = Array.isArray(imagingGuide.commonPitfalls)
+    ? imagingGuide.commonPitfalls
+    : [];
+  const decisionSteps = Array.isArray(disease.decisionFlow?.steps)
+    ? disease.decisionFlow?.steps || []
+    : [];
+  const classifications = Array.isArray(disease.classifications)
+    ? disease.classifications
+    : [];
+  const commonImages = Array.isArray(disease.commonImages)
+    ? disease.commonImages
+    : [];
+
+  const hasSummary = Boolean(
+    summary.typicalPatients ||
+      symptoms.length ||
+      summary.keyPoint ||
+      differentials.length
+  );
+  const hasImagingGuide = Boolean(
+    preferredTests.length || readingPoints.length || commonPitfalls.length
+  );
+  const hasClassifications = classifications.length > 0;
+  const hasCommonImages = commonImages.length > 0;
+
   return (
     <div className="space-y-8">
-      {/* 分型与影像 */}
-      <section>
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">影像与分型</h3>
-        {disease.hasClassification ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {(disease.classifications || []).map((c: any) => (
-              <div
-                key={c.id}
-                className="bg-white rounded-xl shadow-sm border p-4 hover:shadow-md transition cursor-pointer"
-                onClick={() => alert(`查看大图: ${c.imageUrl || "暂无图片"}`)}
-              >
-                <div className="aspect-video bg-gray-100 rounded-lg mb-2 flex items-center justify-center text-gray-400 text-sm">
-                  {c.imageUrl ? "📷 点击查看" : "暂无影像"}
+      {hasSummary && (
+        <StudySection number="1" title="临床一眼看懂">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {summary.typicalPatients && (
+              <InfoCard title="典型人群">
+                <p>{summary.typicalPatients}</p>
+              </InfoCard>
+            )}
+
+            {symptoms.length > 0 && (
+              <InfoCard title="典型表现">
+                <BulletList items={symptoms} />
+              </InfoCard>
+            )}
+
+            {summary.keyPoint && (
+              <InfoCard title="核心理解" className="md:col-span-2">
+                <p className="font-medium text-blue-800">{summary.keyPoint}</p>
+              </InfoCard>
+            )}
+
+            {differentials.length > 0 && (
+              <InfoCard title="常见鉴别" className="md:col-span-2">
+                <div className="flex flex-wrap gap-2">
+                  {differentials.map((item, index) => (
+                    <span
+                      key={`${item}-${index}`}
+                      className="rounded-full bg-gray-100 px-3 py-1 text-sm text-gray-700"
+                    >
+                      {item}
+                    </span>
+                  ))}
                 </div>
-                <h4 className="font-semibold text-gray-800">{c.type}</h4>
-                <p className="text-sm text-gray-500">{c.description}</p>
+              </InfoCard>
+            )}
+          </div>
+        </StudySection>
+      )}
+
+      {physicalExams.length > 0 && (
+        <StudySection number="2" title="关键查体">
+          <div className="space-y-3">
+            {physicalExams.map((exam, index) => (
+              <details
+                key={`${exam.name || "exam"}-${index}`}
+                className="group rounded-xl border bg-white shadow-sm"
+              >
+                <summary className="cursor-pointer list-none px-5 py-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <h4 className="font-semibold text-gray-800">
+                        {index + 1}. {exam.name || "未命名查体"}
+                      </h4>
+                      {exam.target && (
+                        <p className="mt-1 text-sm text-gray-500">
+                          检查目标：{exam.target}
+                        </p>
+                      )}
+                    </div>
+                    <span className="text-sm text-blue-600 group-open:hidden">
+                      展开
+                    </span>
+                    <span className="hidden text-sm text-blue-600 group-open:inline">
+                      收起
+                    </span>
+                  </div>
+                </summary>
+
+                <div className="border-t px-5 py-4">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                    {exam.method && (
+                      <MiniInfo title="怎么做" text={exam.method} />
+                    )}
+                    {exam.positiveFinding && (
+                      <MiniInfo title="阳性表现" text={exam.positiveFinding} />
+                    )}
+                    {exam.meaning && (
+                      <MiniInfo title="提示什么" text={exam.meaning} />
+                    )}
+                  </div>
+
+                  {isUsableImageUrl(exam.imageUrl) && (
+                    <button
+                      type="button"
+                      onClick={() => setPreviewImage(exam.imageUrl || null)}
+                      className="mt-4 block overflow-hidden rounded-lg border"
+                    >
+                      <img
+                        src={exam.imageUrl}
+                        alt={exam.name || "查体示意图"}
+                        className="max-h-72 w-full object-contain"
+                      />
+                    </button>
+                  )}
+                </div>
+              </details>
+            ))}
+          </div>
+        </StudySection>
+      )}
+
+      {hasImagingGuide && (
+        <StudySection number="3" title="影像检查与看片要点">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            {preferredTests.length > 0 && (
+              <InfoCard title="推荐检查">
+                <BulletList items={preferredTests} />
+              </InfoCard>
+            )}
+            {readingPoints.length > 0 && (
+              <InfoCard title="看片顺序与重点">
+                <BulletList items={readingPoints} />
+              </InfoCard>
+            )}
+            {commonPitfalls.length > 0 && (
+              <InfoCard title="常见误区">
+                <BulletList items={commonPitfalls} />
+              </InfoCard>
+            )}
+          </div>
+        </StudySection>
+      )}
+
+      {(hasClassifications || hasCommonImages) && (
+        <StudySection number="4" title="影像与分型">
+          {hasClassifications && (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {classifications.map((classification: any, index: number) => {
+                const imageUrl = classification?.imageUrl;
+                const canPreview = isUsableImageUrl(imageUrl);
+
+                return (
+                  <article
+                    key={classification?.id ?? index}
+                    className="overflow-hidden rounded-xl border bg-white shadow-sm"
+                  >
+                    {canPreview ? (
+                      <button
+                        type="button"
+                        onClick={() => setPreviewImage(imageUrl)}
+                        className="block w-full bg-gray-100"
+                      >
+                        <img
+                          src={imageUrl}
+                          alt={classification?.type || "疾病分型影像"}
+                          className="aspect-video w-full object-contain"
+                        />
+                      </button>
+                    ) : (
+                      <div className="flex aspect-video items-center justify-center bg-gray-100 text-sm text-gray-400">
+                        暂无真实影像
+                      </div>
+                    )}
+
+                    <div className="p-4">
+                      <h4 className="font-semibold text-gray-800">
+                        {classification?.type || `分型 ${index + 1}`}
+                      </h4>
+                      {classification?.description && (
+                        <p className="mt-1 text-sm text-gray-500">
+                          {classification.description}
+                        </p>
+                      )}
+                      {classification?.imageKeyPoints && (
+                        <div className="mt-3 rounded-lg bg-blue-50 p-3 text-sm text-blue-900">
+                          <span className="font-medium">看片要点：</span>
+                          {classification.imageKeyPoints}
+                        </div>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+
+          {hasCommonImages && (
+            <div className={hasClassifications ? "mt-6" : ""}>
+              <h4 className="mb-3 font-semibold text-gray-700">常见影像</h4>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {commonImages.map((image: any, index: number) => {
+                  const normalized =
+                    typeof image === "string"
+                      ? { imageUrl: image, title: `影像 ${index + 1}` }
+                      : image || {};
+                  const imageUrl = normalized.imageUrl || normalized.url;
+                  const canPreview = isUsableImageUrl(imageUrl);
+
+                  if (!canPreview) return null;
+
+                  return (
+                    <button
+                      key={`${imageUrl}-${index}`}
+                      type="button"
+                      onClick={() => setPreviewImage(imageUrl)}
+                      className="overflow-hidden rounded-xl border bg-white text-left shadow-sm"
+                    >
+                      <img
+                        src={imageUrl}
+                        alt={normalized.title || `常见影像 ${index + 1}`}
+                        className="aspect-video w-full object-contain bg-gray-100"
+                      />
+                      <div className="p-3">
+                        <div className="font-medium text-gray-800">
+                          {normalized.title || `影像 ${index + 1}`}
+                        </div>
+                        {normalized.description && (
+                          <p className="mt-1 text-sm text-gray-500">
+                            {normalized.description}
+                          </p>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </StudySection>
+      )}
+
+      {decisionSteps.length > 0 && (
+        <StudySection number="5" title="学习型治疗决策">
+          {disease.decisionFlow?.title && (
+            <h4 className="mb-4 text-lg font-semibold text-gray-800">
+              {disease.decisionFlow.title}
+            </h4>
+          )}
+
+          <div className="space-y-4">
+            {decisionSteps.map((step, index) => (
+              <div
+                key={step.id ?? index}
+                className="rounded-xl border bg-white p-5 shadow-sm"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
+                    {index + 1}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h5 className="font-semibold text-gray-800">
+                      {step.question || "未填写判断问题"}
+                    </h5>
+                    <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+                      {step.yes && (
+                        <div className="rounded-lg bg-green-50 p-3 text-sm text-green-900">
+                          <span className="font-semibold">是 → </span>
+                          {step.yes}
+                        </div>
+                      )}
+                      {step.no && (
+                        <div className="rounded-lg bg-orange-50 p-3 text-sm text-orange-900">
+                          <span className="font-semibold">否 → </span>
+                          {step.no}
+                        </div>
+                      )}
+                    </div>
+                    {step.note && (
+                      <p className="mt-3 text-sm text-gray-500">
+                        为什么：{step.note}
+                      </p>
+                    )}
+                  </div>
+                </div>
               </div>
             ))}
           </div>
-        ) : (
-          <div className="text-gray-500">该疾病暂无分型，请查看影像库</div>
-        )}
-      </section>
 
-      {/* 手术方案 */}
+          {disease.decisionFlow?.disclaimer && (
+            <p className="mt-4 rounded-lg bg-yellow-50 p-3 text-xs text-yellow-800">
+              {disease.decisionFlow.disclaimer}
+            </p>
+          )}
+        </StudySection>
+      )}
+
       {disease.surgeryTable && (
-        <section>
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">手术方案</h3>
-          <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-            <table className="w-full text-sm">
+        <StudySection number="6" title="手术方案">
+          <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
+            <table className="min-w-full text-sm">
               <thead className="bg-gray-50">
                 <tr>
-                  {(disease.surgeryTable.headers || []).map((h: string, i: number) => (
-                    <th key={i} className="px-4 py-3 text-left text-gray-600 font-medium">
-                      {h}
-                    </th>
-                  ))}
+                  {(disease.surgeryTable.headers || []).map(
+                    (header: string, index: number) => (
+                      <th
+                        key={index}
+                        className="whitespace-nowrap px-4 py-3 text-left font-medium text-gray-600"
+                      >
+                        {header}
+                      </th>
+                    )
+                  )}
                 </tr>
               </thead>
               <tbody>
-                {(disease.surgeryTable.rows || []).map((row: any[], i: number) => (
-                  <tr key={i} className="border-t border-gray-100">
-                    {row.map((cell, j) => (
-                      <td key={j} className="px-4 py-3 text-gray-700">
-                        {cell}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
+                {(disease.surgeryTable.rows || []).map(
+                  (row: any[], rowIndex: number) => (
+                    <tr key={rowIndex} className="border-t border-gray-100">
+                      {row.map((cell, cellIndex) => (
+                        <td
+                          key={cellIndex}
+                          className="min-w-40 px-4 py-3 align-top text-gray-700"
+                        >
+                          {cell}
+                        </td>
+                      ))}
+                    </tr>
+                  )
+                )}
               </tbody>
             </table>
           </div>
-        </section>
+        </StudySection>
       )}
 
-      {/* 康复方案 */}
-      {disease.rehabPlan && disease.rehabPlan.length > 0 && (
-        <section>
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">康复方案</h3>
+      {Array.isArray(disease.rehabPlan) && disease.rehabPlan.length > 0 && (
+        <StudySection number="7" title="康复方案">
           <div className="space-y-3">
-            {(disease.rehabPlan || []).map((item: any, i: number) => (
-              <div key={i} className="bg-white rounded-xl shadow-sm border p-4">
-                <div className="font-medium text-blue-600 text-sm">{item.phase}</div>
-                <div className="text-gray-700 text-sm mt-1">{item.content}</div>
+            {disease.rehabPlan.map((item: any, index: number) => (
+              <div
+                key={index}
+                className="rounded-xl border bg-white p-4 shadow-sm"
+              >
+                <div className="text-sm font-medium text-blue-600">
+                  {item.phase}
+                </div>
+                <div className="mt-1 text-sm text-gray-700">
+                  {item.content}
+                </div>
               </div>
             ))}
           </div>
-        </section>
+        </StudySection>
+      )}
+
+      {!hasSummary &&
+        physicalExams.length === 0 &&
+        !hasImagingGuide &&
+        !hasClassifications &&
+        !hasCommonImages &&
+        decisionSteps.length === 0 &&
+        !disease.surgeryTable &&
+        (!Array.isArray(disease.rehabPlan) || disease.rehabPlan.length === 0) && (
+          <div className="rounded-xl border bg-white p-6 text-gray-500 shadow-sm">
+            该疾病暂无学习内容。
+          </div>
+        )}
+
+      {previewImage && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
+          onClick={() => setPreviewImage(null)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <button
+            type="button"
+            onClick={() => setPreviewImage(null)}
+            className="absolute right-5 top-5 rounded-full bg-white/90 px-3 py-1 text-sm font-medium text-gray-700"
+          >
+            关闭
+          </button>
+          <img
+            src={previewImage}
+            alt="放大影像"
+            className="max-h-[90vh] max-w-[95vw] rounded-lg bg-white object-contain"
+            onClick={(event) => event.stopPropagation()}
+          />
+        </div>
       )}
     </div>
+  );
+}
+
+function StudySection({
+  number,
+  title,
+  children,
+}: {
+  number: string;
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <section>
+      <div className="mb-4 flex items-center gap-3">
+        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
+          {number}
+        </span>
+        <h3 className="text-lg font-semibold text-gray-800">{title}</h3>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function InfoCard({
+  title,
+  children,
+  className = "",
+}: {
+  title: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={`rounded-xl border bg-white p-5 shadow-sm ${className}`}>
+      <h4 className="mb-3 font-semibold text-gray-800">{title}</h4>
+      <div className="text-sm leading-6 text-gray-700">{children}</div>
+    </div>
+  );
+}
+
+function MiniInfo({ title, text }: { title: string; text: string }) {
+  return (
+    <div className="rounded-lg bg-gray-50 p-3">
+      <div className="mb-1 text-sm font-semibold text-gray-700">{title}</div>
+      <p className="text-sm leading-6 text-gray-600">{text}</p>
+    </div>
+  );
+}
+
+function BulletList({ items }: { items: string[] }) {
+  return (
+    <ul className="space-y-2">
+      {items.map((item, index) => (
+        <li key={`${item}-${index}`} className="flex items-start gap-2">
+          <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
+          <span>{item}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
