@@ -74,6 +74,7 @@ export default function Home() {
   const [selectedDisease, setSelectedDisease] = useState<DiseaseData | null>(null);
   const [mode, setMode] = useState<"work" | "study">("work");
   const [currentStep, setCurrentStep] = useState(0);
+  const homeBackgroundRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     async function loadDiseases() {
@@ -154,7 +155,7 @@ export default function Home() {
     () =>
       [...diseaseList]
         .sort((a, b) => b.viewCount - a.viewCount)
-        .slice(0, 3),
+        .slice(0, 6),
     [diseaseList]
   );
 
@@ -240,76 +241,409 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white">
-      <div className="mx-auto max-w-3xl px-4 py-16">
-        <div className="mb-12 text-center">
-          <h1 className="text-4xl font-bold text-blue-600">OrthoFlow</h1>
-          <p className="mt-2 text-gray-500">骨科轮转规范化培训工具</p>
+    <div
+      ref={homeBackgroundRef}
+      onPointerMove={(event) => {
+        const rect = event.currentTarget.getBoundingClientRect();
+        const x = ((event.clientX - rect.left) / rect.width) * 100;
+        const y = ((event.clientY - rect.top) / rect.height) * 100;
+
+        event.currentTarget.style.setProperty("--mouse-x", `${x}%`);
+        event.currentTarget.style.setProperty("--mouse-y", `${y}%`);
+      }}
+      className="relative min-h-screen overflow-hidden bg-[#061222] text-white"
+    >
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div
+          className="absolute inset-0 opacity-90"
+          style={{
+            background:
+              "radial-gradient(620px circle at var(--mouse-x, 50%) var(--mouse-y, 35%), rgba(56, 189, 248, 0.22), transparent 46%)",
+          }}
+        />
+        <div
+          className="absolute inset-0 opacity-[0.16]"
+          style={{
+            backgroundImage:
+              "linear-gradient(rgba(148, 163, 184, 0.16) 1px, transparent 1px), linear-gradient(90deg, rgba(148, 163, 184, 0.16) 1px, transparent 1px)",
+            backgroundSize: "46px 46px",
+            maskImage:
+              "linear-gradient(to bottom, rgba(0,0,0,0.9), rgba(0,0,0,0.15) 78%, transparent)",
+          }}
+        />
+        <div className="hero-orb hero-orb-a absolute -left-28 top-10 h-72 w-72 rounded-full bg-cyan-400/20 blur-3xl" />
+        <div className="hero-orb hero-orb-b absolute right-[-7rem] top-1/4 h-96 w-96 rounded-full bg-blue-500/20 blur-3xl" />
+        <div className="hero-orb hero-orb-c absolute bottom-[-10rem] left-1/3 h-80 w-80 rounded-full bg-violet-500/15 blur-3xl" />
+        <div className="absolute left-1/2 top-0 h-px w-[70%] -translate-x-1/2 bg-gradient-to-r from-transparent via-cyan-300/60 to-transparent" />
+      </div>
+
+      <header className="relative z-20 mx-auto flex max-w-7xl items-center justify-between px-4 py-5 sm:px-6 lg:px-8">
+        <div className="flex items-center gap-3">
+          <div className="grid h-11 w-11 place-items-center rounded-2xl border border-white/15 bg-white/10 shadow-[0_0_35px_rgba(34,211,238,0.16)] backdrop-blur-xl">
+            <svg
+              viewBox="0 0 32 32"
+              className="h-6 w-6 text-cyan-200"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path
+                d="M9 8.5c2.3 0 3.1 2.2 3.1 4.2v6.6c0 2-0.8 4.2-3.1 4.2S5.5 21.3 5.5 19s1.2-3.3 2.7-3.3H24"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+              />
+              <path
+                d="M23 8.5c-2.3 0-3.1 2.2-3.1 4.2v6.6c0 2 0.8 4.2 3.1 4.2s3.5-2.2 3.5-4.5-1.2-3.3-2.7-3.3H8"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+              />
+            </svg>
+          </div>
+          <div>
+            <div className="text-lg font-semibold tracking-tight">OrthoFlow</div>
+            <div className="text-xs text-slate-400">Orthopaedic Clinical Learning</div>
+          </div>
         </div>
 
-        <div className="relative">
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(event) => setSearchTerm(event.target.value)}
-            placeholder="搜索疾病名称、英文简称、拼音..."
-            className="w-full rounded-2xl border border-gray-200 px-6 py-4 text-lg shadow-sm transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-400"
-          />
+        <div className="hidden items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-4 py-2 text-xs text-slate-300 backdrop-blur-xl sm:flex">
+          <span className="relative flex h-2 w-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-300 opacity-70" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-300" />
+          </span>
+          当前收录 {diseaseList.length} 个疾病主题
         </div>
+      </header>
 
-        {searchTerm && filteredDiseases.length > 0 && (
-          <div className="mt-4 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-lg">
-            {filteredDiseases.map((disease, index) => (
-              <button
-                key={disease.id}
-                onClick={() => handleOpenDisease(disease, true)}
-                className={`flex w-full items-center justify-between px-6 py-4 text-left transition hover:bg-blue-50 ${
-                  index !== filteredDiseases.length - 1
-                    ? "border-b border-gray-100"
-                    : ""
-                }`}
+      <main className="relative z-10 mx-auto grid min-h-[calc(100vh-88px)] max-w-7xl items-center gap-12 px-4 pb-16 pt-8 sm:px-6 lg:grid-cols-[1.08fr_0.92fr] lg:px-8 lg:pb-20 lg:pt-10">
+        <section>
+          <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/[0.08] px-3 py-1.5 text-xs font-medium text-cyan-100 backdrop-blur-xl">
+            <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_12px_rgba(103,232,249,0.9)]" />
+            临床工作流 × 影像学习 × 手术决策
+          </div>
+
+          <h1 className="max-w-4xl text-4xl font-semibold leading-[1.08] tracking-[-0.04em] text-white sm:text-5xl lg:text-6xl">
+            从查体和影像，
+            <span className="bg-gradient-to-r from-cyan-200 via-sky-300 to-blue-300 bg-clip-text text-transparent">
+              到手术决策。
+            </span>
+          </h1>
+
+          <p className="mt-5 max-w-2xl text-base leading-7 text-slate-300 sm:text-lg">
+            不只是帮你完成工作，更重要的是帮助你在繁重的临床任务中，真正学会骨科。
+          </p>
+
+          <div className="mt-8 rounded-[30px] border border-white/12 bg-white/[0.08] p-3 shadow-[0_30px_90px_rgba(0,0,0,0.34)] backdrop-blur-2xl sm:p-4">
+            <div className="relative flex items-center rounded-[22px] border border-white/10 bg-slate-950/45 shadow-inner shadow-black/20 transition focus-within:border-cyan-300/40 focus-within:ring-4 focus-within:ring-cyan-300/10">
+              <svg
+                viewBox="0 0 24 24"
+                className="ml-5 h-5 w-5 shrink-0 text-cyan-200"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                aria-hidden="true"
               >
-                <div>
-                  <span className="font-medium text-gray-800">
-                    {disease.name}
-                  </span>
-                  <span className="ml-3 text-sm text-gray-400">
-                    {disease.englishName}
-                  </span>
-                </div>
-                <span className="text-gray-400">→</span>
+                <circle cx="11" cy="11" r="7" />
+                <path d="m16.5 16.5 4 4" strokeLinecap="round" />
+              </svg>
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                onKeyDown={(event) => {
+                  if (
+                    event.key === "Enter" &&
+                    searchTerm.trim() &&
+                    filteredDiseases.length > 0
+                  ) {
+                    handleOpenDisease(filteredDiseases[0], true);
+                  }
+                }}
+                placeholder="搜索疾病、分型、查体、影像或手术方式..."
+                className="h-16 min-w-0 flex-1 bg-transparent px-4 text-base text-white outline-none placeholder:text-slate-500 sm:text-lg"
+                autoComplete="off"
+                aria-label="搜索骨科疾病"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  if (searchTerm.trim() && filteredDiseases.length > 0) {
+                    handleOpenDisease(filteredDiseases[0], true);
+                  }
+                }}
+                disabled={!searchTerm.trim() || filteredDiseases.length === 0}
+                className="mr-2 hidden h-12 items-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-400 to-blue-500 px-5 text-sm font-semibold text-slate-950 shadow-[0_10px_30px_rgba(34,211,238,0.22)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-35 sm:flex"
+              >
+                开始检索
+                <span aria-hidden="true">↗</span>
               </button>
+            </div>
+
+            {searchTerm && filteredDiseases.length > 0 && (
+              <div className="mt-3 max-h-80 overflow-y-auto rounded-[22px] border border-white/10 bg-slate-950/70 p-2 shadow-2xl backdrop-blur-2xl">
+                {filteredDiseases.slice(0, 10).map((disease, index) => (
+                  <button
+                    key={disease.id}
+                    onClick={() => handleOpenDisease(disease, true)}
+                    className="group flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left transition hover:bg-white/10"
+                  >
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-cyan-300/15 bg-cyan-300/[0.08] text-xs font-semibold text-cyan-100">
+                        {String(index + 1).padStart(2, "0")}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="truncate font-medium text-white">
+                          {disease.name}
+                        </div>
+                        <div className="truncate text-xs text-slate-400">
+                          {disease.englishName}
+                        </div>
+                      </div>
+                    </div>
+                    <span className="ml-4 text-slate-500 transition group-hover:translate-x-1 group-hover:text-cyan-200">
+                      →
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {searchTerm && filteredDiseases.length === 0 && (
+              <div className="mt-3 rounded-[22px] border border-white/10 bg-slate-950/55 px-5 py-6 text-center text-sm text-slate-400">
+                暂未找到匹配疾病。可以尝试中文名、英文名、拼音或常用缩写。
+              </div>
+            )}
+          </div>
+
+          {!searchTerm && popularDiseases.length > 0 && (
+            <div className="mt-6">
+              <div className="mb-3 flex items-center justify-between">
+                <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-500">
+                  Popular Topics
+                </p>
+                <span className="text-xs text-slate-500">点击直接进入</span>
+              </div>
+              <div className="flex flex-wrap gap-2.5">
+                {popularDiseases.map((disease) => (
+                  <button
+                    key={disease.id}
+                    onClick={() => handleOpenDisease(disease, false)}
+                    className="group rounded-full border border-white/10 bg-white/[0.06] px-4 py-2 text-sm text-slate-300 backdrop-blur-xl transition hover:-translate-y-0.5 hover:border-cyan-300/30 hover:bg-cyan-300/[0.1] hover:text-white"
+                  >
+                    {disease.name}
+                    <span className="ml-2 text-slate-600 transition group-hover:text-cyan-200">
+                      ↗
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="mt-9 grid max-w-2xl grid-cols-3 gap-3">
+            {[
+              [String(diseaseList.length), "疾病主题"],
+              ["2", "工作与学习模式"],
+              ["1", "条临床决策链"],
+            ].map(([value, label]) => (
+              <div
+                key={label}
+                className="rounded-2xl border border-white/8 bg-white/[0.04] px-3 py-3 backdrop-blur-xl sm:px-4"
+              >
+                <div className="text-xl font-semibold text-white sm:text-2xl">
+                  {value}
+                </div>
+                <div className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
+                  {label}
+                </div>
+              </div>
             ))}
           </div>
-        )}
+        </section>
 
-        {searchTerm && filteredDiseases.length === 0 && (
-          <div className="mt-4 py-8 text-center text-gray-400">
-            未找到匹配的疾病
+        <section className="relative hidden min-h-[610px] lg:block" aria-hidden="true">
+          <div className="absolute inset-6 rounded-[40px] border border-white/10 bg-white/[0.045] shadow-[0_35px_120px_rgba(0,0,0,0.38)] backdrop-blur-2xl" />
+          <div className="absolute inset-6 overflow-hidden rounded-[40px]">
+            <div className="scan-line absolute left-0 right-0 top-0 h-24 bg-gradient-to-b from-transparent via-cyan-300/10 to-transparent" />
+            <div
+              className="absolute inset-0 opacity-30"
+              style={{
+                backgroundImage:
+                  "radial-gradient(circle at center, rgba(125, 211, 252, 0.22) 1px, transparent 1.5px)",
+                backgroundSize: "22px 22px",
+              }}
+            />
           </div>
-        )}
 
-        {!searchTerm && diseaseList.length > 0 && (
-          <div className="mt-8">
-            <p className="mb-3 text-sm text-gray-400">热门疾病</p>
-            <div className="flex flex-wrap gap-2">
-              {popularDiseases.map((disease) => (
-                <button
-                  key={disease.id}
-                  onClick={() => handleOpenDisease(disease, false)}
-                  className="rounded-full border border-gray-200 bg-white px-4 py-2 text-sm transition hover:border-blue-400 hover:text-blue-600"
-                >
-                  {disease.name}
-                </button>
-              ))}
+          <div className="absolute left-14 right-14 top-14 flex items-center justify-between text-xs text-slate-400">
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-cyan-300 shadow-[0_0_12px_rgba(103,232,249,0.8)]" />
+              Clinical Reasoning Map
             </div>
+            <span>LIVE</span>
           </div>
-        )}
 
-        <div className="mt-12 text-center text-sm text-gray-400">
-          当前收录 {diseaseList.length} 种骨科疾病
-        </div>
+          <div className="absolute left-1/2 top-[46%] h-72 w-72 -translate-x-1/2 -translate-y-1/2">
+            <div className="absolute inset-0 rounded-full border border-cyan-200/10" />
+            <div className="absolute inset-6 rounded-full border border-dashed border-cyan-200/20 motion-safe:animate-[spin_24s_linear_infinite]" />
+            <div className="absolute inset-16 rounded-full border border-blue-300/15 motion-safe:animate-[spin_18s_linear_infinite_reverse]" />
+            <div className="absolute inset-0 grid place-items-center">
+              <svg
+                viewBox="0 0 220 220"
+                className="h-52 w-52 drop-shadow-[0_0_25px_rgba(34,211,238,0.18)]"
+                fill="none"
+              >
+                <circle cx="110" cy="110" r="84" stroke="rgba(125,211,252,.12)" />
+                <circle cx="110" cy="110" r="58" stroke="rgba(125,211,252,.18)" />
+                <path
+                  d="M76 57c24-17 58-9 72 16 12 22 4 50-18 63-21 13-49 7-63-14-15-23-10-51 9-65Z"
+                  stroke="rgba(165,243,252,.75)"
+                  strokeWidth="4"
+                  strokeLinecap="round"
+                />
+                <path
+                  d="M91 82c12-9 30-5 37 8 7 12 2 28-10 35-12 7-28 4-36-8-8-12-5-28 9-35Z"
+                  fill="rgba(34,211,238,.12)"
+                  stroke="rgba(103,232,249,.75)"
+                  strokeWidth="3"
+                />
+                <path
+                  d="M137 132c18 7 28 22 31 43M75 132c-18 10-26 24-28 43"
+                  stroke="rgba(147,197,253,.55)"
+                  strokeWidth="5"
+                  strokeLinecap="round"
+                />
+                <path
+                  d="M64 174h108"
+                  stroke="rgba(125,211,252,.18)"
+                  strokeWidth="2"
+                  strokeDasharray="5 7"
+                />
+              </svg>
+            </div>
+            <span className="absolute left-1/2 top-2 h-2.5 w-2.5 -translate-x-1/2 rounded-full bg-cyan-200 shadow-[0_0_18px_rgba(165,243,252,1)]" />
+            <span className="absolute bottom-12 right-8 h-2 w-2 rounded-full bg-blue-300 shadow-[0_0_14px_rgba(147,197,253,1)]" />
+          </div>
+
+          <div className="absolute bottom-16 left-14 right-14 grid grid-cols-3 gap-3">
+            {[
+              ["01", "查体", "定位功能缺损"],
+              ["02", "影像", "识别结构风险"],
+              ["03", "决策", "连接适应证与术式"],
+            ].map(([number, title, description], index) => (
+              <div
+                key={number}
+                className="relative overflow-hidden rounded-2xl border border-white/10 bg-slate-950/45 p-4 backdrop-blur-xl"
+              >
+                {index < 2 && (
+                  <div className="path-pulse absolute -right-3 top-1/2 h-px w-6 bg-gradient-to-r from-cyan-300/70 to-transparent" />
+                )}
+                <div className="text-[10px] font-semibold tracking-[0.2em] text-cyan-300/70">
+                  {number}
+                </div>
+                <div className="mt-2 text-sm font-semibold text-white">{title}</div>
+                <div className="mt-1 text-[11px] leading-5 text-slate-500">
+                  {description}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="absolute right-0 top-32 rounded-2xl border border-cyan-200/15 bg-cyan-200/[0.07] px-4 py-3 text-xs text-cyan-100 shadow-[0_18px_50px_rgba(0,0,0,0.25)] backdrop-blur-xl">
+            <div className="text-[10px] uppercase tracking-[0.18em] text-cyan-300/60">
+              Signal
+            </div>
+            <div className="mt-1 font-medium">影像与临床已对应</div>
+          </div>
+
+          <div className="absolute left-0 top-60 rounded-2xl border border-white/10 bg-white/[0.07] px-4 py-3 text-xs text-slate-200 shadow-[0_18px_50px_rgba(0,0,0,0.25)] backdrop-blur-xl">
+            <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
+              Mode
+            </div>
+            <div className="mt-1 font-medium">今天上班 / 我要学习</div>
+          </div>
+        </section>
+      </main>
+
+      <div className="relative z-10 mx-auto max-w-7xl px-4 pb-6 text-center text-[11px] leading-5 text-slate-600 sm:px-6 lg:px-8">
+        OrthoFlow用于临床学习与工作辅助，不能替代上级医师判断、患者个体化评估及本院诊疗规范。
       </div>
+
+      <style jsx>{`
+        .hero-orb {
+          animation: orthoflow-float 15s ease-in-out infinite;
+          will-change: transform;
+        }
+
+        .hero-orb-b {
+          animation-delay: -5s;
+          animation-duration: 18s;
+        }
+
+        .hero-orb-c {
+          animation-delay: -9s;
+          animation-duration: 21s;
+        }
+
+        .scan-line {
+          animation: orthoflow-scan 6s ease-in-out infinite;
+        }
+
+        .path-pulse {
+          animation: orthoflow-pulse-line 2.4s ease-in-out infinite;
+        }
+
+        @keyframes orthoflow-float {
+          0%,
+          100% {
+            transform: translate3d(0, 0, 0) scale(1);
+          }
+          35% {
+            transform: translate3d(28px, -22px, 0) scale(1.08);
+          }
+          70% {
+            transform: translate3d(-18px, 24px, 0) scale(0.94);
+          }
+        }
+
+        @keyframes orthoflow-scan {
+          0%,
+          100% {
+            transform: translateY(-100%);
+            opacity: 0;
+          }
+          15% {
+            opacity: 1;
+          }
+          75% {
+            opacity: 0.75;
+          }
+          90% {
+            transform: translateY(610px);
+            opacity: 0;
+          }
+        }
+
+        @keyframes orthoflow-pulse-line {
+          0%,
+          100% {
+            opacity: 0.25;
+            transform: scaleX(0.6);
+          }
+          50% {
+            opacity: 1;
+            transform: scaleX(1.15);
+          }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .hero-orb,
+          .scan-line,
+          .path-pulse {
+            animation: none;
+          }
+        }
+      `}</style>
     </div>
   );
 }
