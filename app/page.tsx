@@ -1,7 +1,7 @@
 "use client";
 
 import { supabase } from "@/lib/supabase";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 type LearningSummary = {
   typicalPatients?: string;
@@ -456,6 +456,224 @@ function QuickActionCard({ title, content }: { title: string; content: string })
   );
 }
 
+
+type GalleryImage = {
+  imageUrl: string;
+  title?: string;
+  description?: string;
+  alt?: string;
+};
+
+function normalizeGalleryImages(source: any): GalleryImage[] {
+  const rawImages: any[] = [];
+
+  if (Array.isArray(source?.images)) rawImages.push(...source.images);
+  if (Array.isArray(source?.imageUrls)) rawImages.push(...source.imageUrls);
+
+  [
+    source?.imageUrl,
+    source?.imageUrl2,
+    source?.imageUrl3,
+    source?.imageUrl4,
+  ].forEach((imageUrl) => {
+    if (imageUrl) rawImages.push(imageUrl);
+  });
+
+  const normalized = rawImages
+    .map((image, index): GalleryImage | null => {
+      if (typeof image === "string") {
+        return isUsableImageUrl(image)
+          ? { imageUrl: image, title: `影像 ${index + 1}` }
+          : null;
+      }
+
+      const imageUrl = image?.imageUrl || image?.url || image?.src;
+      if (!isUsableImageUrl(imageUrl)) return null;
+
+      return {
+        imageUrl,
+        title: image?.title,
+        description: image?.description,
+        alt: image?.alt,
+      };
+    })
+    .filter((image): image is GalleryImage => Boolean(image));
+
+  return normalized.filter(
+    (image, index, array) =>
+      array.findIndex((candidate) => candidate.imageUrl === image.imageUrl) ===
+      index
+  );
+}
+
+function ClassificationImageCarousel({
+  classification,
+  onPreview,
+}: {
+  classification: any;
+  onPreview: (imageUrl: string) => void;
+}) {
+  const images = useMemo(
+    () => normalizeGalleryImages(classification),
+    [classification]
+  );
+  const [activeIndex, setActiveIndex] = useState(0);
+  const lastWheelAt = useRef(0);
+  const touchStartX = useRef<number | null>(null);
+
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [classification?.id]);
+
+  if (images.length === 0) {
+    return (
+      <div className="flex aspect-video items-center justify-center bg-gray-100 text-sm text-gray-400">
+        暂无真实影像
+      </div>
+    );
+  }
+
+  const activeImage = images[Math.min(activeIndex, images.length - 1)];
+
+  const move = (direction: 1 | -1) => {
+    setActiveIndex((current) =>
+      (current + direction + images.length) % images.length
+    );
+  };
+
+  const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+    if (images.length <= 1) return;
+
+    const wheelAmount =
+      Math.abs(event.deltaX) > Math.abs(event.deltaY)
+        ? event.deltaX
+        : event.deltaY;
+
+    if (Math.abs(wheelAmount) < 8) return;
+
+    event.preventDefault();
+
+    const now = Date.now();
+    if (now - lastWheelAt.current < 320) return;
+    lastWheelAt.current = now;
+
+    move(wheelAmount > 0 ? 1 : -1);
+  };
+
+  const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
+    touchStartX.current = event.touches[0]?.clientX ?? null;
+  };
+
+  const handleTouchEnd = (event: React.TouchEvent<HTMLDivElement>) => {
+    if (touchStartX.current === null || images.length <= 1) return;
+
+    const endX = event.changedTouches[0]?.clientX ?? touchStartX.current;
+    const distance = endX - touchStartX.current;
+    touchStartX.current = null;
+
+    if (Math.abs(distance) < 40) return;
+    move(distance < 0 ? 1 : -1);
+  };
+
+  return (
+    <div
+      className="group relative aspect-video overflow-hidden bg-gray-100"
+      onWheel={handleWheel}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (images.length <= 1) return;
+        if (event.key === "ArrowRight") move(1);
+        if (event.key === "ArrowLeft") move(-1);
+      }}
+      aria-label={`${classification?.type || "疾病分型"}影像轮播，共${images.length}张`}
+    >
+      <button
+        type="button"
+        onClick={() => onPreview(activeImage.imageUrl)}
+        className="block h-full w-full"
+        aria-label={`放大查看${activeImage.title || classification?.type || "影像"}`}
+      >
+        <img
+          src={activeImage.imageUrl}
+          alt={
+            activeImage.alt ||
+            activeImage.title ||
+            classification?.type ||
+            "疾病分型影像"
+          }
+          className="h-full w-full object-contain"
+        />
+      </button>
+
+      {images.length > 1 && (
+        <>
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              move(-1);
+            }}
+            className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/55 px-2.5 py-1.5 text-lg leading-none text-white opacity-0 transition hover:bg-black/75 group-hover:opacity-100 focus:opacity-100"
+            aria-label="上一张影像"
+          >
+            ‹
+          </button>
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              move(1);
+            }}
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-black/55 px-2.5 py-1.5 text-lg leading-none text-white opacity-0 transition hover:bg-black/75 group-hover:opacity-100 focus:opacity-100"
+            aria-label="下一张影像"
+          >
+            ›
+          </button>
+
+          <div className="pointer-events-none absolute right-2 top-2 rounded-full bg-black/60 px-2 py-1 text-xs text-white">
+            {activeIndex + 1} / {images.length}
+          </div>
+
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/65 via-black/20 to-transparent px-3 pb-2 pt-8 text-white">
+            <div className="flex items-end justify-between gap-3">
+              <div className="min-w-0">
+                {activeImage.title && (
+                  <div className="truncate text-sm font-medium">
+                    {activeImage.title}
+                  </div>
+                )}
+                <div className="text-[11px] text-white/80">
+                  鼠标滚轮、左右键或滑动切换
+                </div>
+              </div>
+              <div className="flex shrink-0 gap-1">
+                {images.map((image, index) => (
+                  <button
+                    key={image.imageUrl}
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setActiveIndex(index);
+                    }}
+                    className={`pointer-events-auto h-1.5 rounded-full transition-all ${
+                      index === activeIndex
+                        ? "w-5 bg-white"
+                        : "w-1.5 bg-white/55 hover:bg-white/80"
+                    }`}
+                    aria-label={`查看第${index + 1}张影像`}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function StudyMode({ disease }: { disease: DiseaseData }) {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
@@ -631,31 +849,15 @@ function StudyMode({ disease }: { disease: DiseaseData }) {
           {hasClassifications && (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {classifications.map((classification: any, index: number) => {
-                const imageUrl = classification?.imageUrl;
-                const canPreview = isUsableImageUrl(imageUrl);
-
                 return (
                   <article
                     key={classification?.id ?? index}
                     className="overflow-hidden rounded-xl border bg-white shadow-sm"
                   >
-                    {canPreview ? (
-                      <button
-                        type="button"
-                        onClick={() => setPreviewImage(imageUrl)}
-                        className="block w-full bg-gray-100"
-                      >
-                        <img
-                          src={imageUrl}
-                          alt={classification?.type || "疾病分型影像"}
-                          className="aspect-video w-full object-contain"
-                        />
-                      </button>
-                    ) : (
-                      <div className="flex aspect-video items-center justify-center bg-gray-100 text-sm text-gray-400">
-                        暂无真实影像
-                      </div>
-                    )}
+                    <ClassificationImageCarousel
+                      classification={classification}
+                      onPreview={setPreviewImage}
+                    />
 
                     <div className="p-4">
                       <h4 className="font-semibold text-gray-800">
