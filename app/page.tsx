@@ -180,52 +180,104 @@ export default function Home() {
 
   if (selectedDisease) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <header className="sticky top-0 z-10 border-b bg-white">
-          <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-4">
+      <div className="relative min-h-screen overflow-x-hidden bg-[#061220] text-slate-100">
+        <div className="pointer-events-none fixed inset-0 overflow-hidden">
+          <div
+            className="absolute inset-0 opacity-[0.14]"
+            style={{
+              backgroundImage:
+                "linear-gradient(rgba(148,163,184,.13) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,.13) 1px, transparent 1px)",
+              backgroundSize: "48px 48px",
+              maskImage:
+                "linear-gradient(to bottom, rgba(0,0,0,.95), rgba(0,0,0,.35) 74%, transparent)",
+            }}
+          />
+          <div className="absolute -left-24 top-20 h-80 w-80 rounded-full bg-cyan-400/10 blur-3xl motion-safe:animate-[pulse_10s_ease-in-out_infinite]" />
+          <div className="absolute right-[-8rem] top-1/3 h-96 w-96 rounded-full bg-blue-500/10 blur-3xl motion-safe:animate-[pulse_13s_ease-in-out_infinite]" />
+          <div className="absolute bottom-[-12rem] left-1/3 h-96 w-96 rounded-full bg-violet-500/10 blur-3xl motion-safe:animate-[pulse_16s_ease-in-out_infinite]" />
+        </div>
+
+        <header className="sticky top-0 z-40 border-b border-white/10 bg-[#071423]/80 backdrop-blur-2xl">
+          <div className="mx-auto flex max-w-[1500px] flex-col gap-4 px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
+            <div className="flex min-w-0 items-center gap-4">
               <button
                 onClick={() => setSelectedDisease(null)}
-                className="text-sm font-medium text-blue-600 hover:text-blue-800"
+                className="group inline-flex h-10 shrink-0 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.06] px-3 text-sm text-slate-300 transition hover:border-cyan-300/30 hover:bg-cyan-300/[0.08] hover:text-white"
               >
-                ← 返回首页
+                <span className="transition group-hover:-translate-x-0.5">←</span>
+                返回首页
               </button>
-              <div>
-                <h1 className="text-xl font-bold text-gray-800">
-                  {selectedDisease.name}
-                </h1>
-                <p className="text-sm text-gray-500">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="truncate text-xl font-semibold tracking-tight text-white sm:text-2xl">
+                    {selectedDisease.name}
+                  </h1>
+                  <span className="rounded-full border border-cyan-300/20 bg-cyan-300/[0.08] px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-cyan-200">
+                    Clinical Pathway
+                  </span>
+                </div>
+                <p className="mt-1 truncate text-sm text-slate-500">
                   {selectedDisease.englishName}
                 </p>
               </div>
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex w-full gap-2 rounded-2xl border border-white/10 bg-slate-950/45 p-1.5 shadow-inner shadow-black/20 lg:w-auto">
               <button
                 onClick={() => setMode("work")}
-                className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
+                className={`flex-1 rounded-xl px-5 py-2.5 text-sm font-medium transition lg:flex-none ${
                   mode === "work"
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    ? "bg-gradient-to-r from-cyan-300 to-blue-400 text-slate-950 shadow-[0_8px_28px_rgba(34,211,238,.2)]"
+                    : "text-slate-400 hover:bg-white/[0.06] hover:text-white"
                 }`}
               >
-                🏥 今天上班
+                今天上班
               </button>
               <button
                 onClick={() => setMode("study")}
-                className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
+                className={`flex-1 rounded-xl px-5 py-2.5 text-sm font-medium transition lg:flex-none ${
                   mode === "study"
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    ? "bg-gradient-to-r from-cyan-300 to-blue-400 text-slate-950 shadow-[0_8px_28px_rgba(34,211,238,.2)]"
+                    : "text-slate-400 hover:bg-white/[0.06] hover:text-white"
                 }`}
               >
-                📖 我要学习
+                我要学习
               </button>
             </div>
           </div>
         </header>
 
-        <main className="mx-auto max-w-7xl px-4 py-6">
+        <main className="relative z-10 mx-auto max-w-[1500px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+          <section className="mb-6 overflow-hidden rounded-[28px] border border-white/10 bg-white/[0.055] p-5 shadow-[0_25px_80px_rgba(0,0,0,.24)] backdrop-blur-2xl sm:p-6">
+            <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-cyan-300/70">
+                  OrthoFlow · {mode === "work" ? "Workflow Mode" : "Study Mode"}
+                </div>
+                <h2 className="mt-3 text-2xl font-semibold tracking-tight text-white sm:text-3xl">
+                  {mode === "work" ? "把临床任务拆成清晰步骤" : "把查体、影像与治疗决策连起来"}
+                </h2>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
+                  {mode === "work"
+                    ? "沿着接诊、检查、诊断、治疗和随访逐步推进，减少遗漏，同时保留临床判断空间。"
+                    : "先看典型患者，再抓关键查体与影像，最后理解为什么选择某种治疗或手术。"}
+                </p>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center sm:min-w-[360px]">
+                {[
+                  ["模式", mode === "work" ? "临床执行" : "系统学习"],
+                  ["主题", selectedDisease.name],
+                  ["状态", "内容已载入"],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-2xl border border-white/10 bg-slate-950/35 px-3 py-3">
+                    <div className="text-[10px] uppercase tracking-[0.16em] text-slate-600">{label}</div>
+                    <div className="mt-1 truncate text-sm font-medium text-slate-200">{value}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
           {mode === "work" ? (
             <WorkMode
               disease={selectedDisease}
@@ -236,6 +288,10 @@ export default function Home() {
             <StudyMode disease={selectedDisease} />
           )}
         </main>
+
+        <footer className="relative z-10 mx-auto max-w-[1500px] px-4 pb-8 pt-3 text-center text-[11px] leading-5 text-slate-600 sm:px-6 lg:px-8">
+          OrthoFlow用于临床学习与工作辅助，不能替代上级医师判断、患者个体化评估及本院诊疗规范。
+        </footer>
       </div>
     );
   }
@@ -652,86 +708,139 @@ function WorkMode({ disease, currentStep, setCurrentStep }: any) {
   const steps = disease.workflowSteps || [];
   const safeStep = Math.min(currentStep, Math.max(steps.length - 1, 0));
   const currentTasks = steps[safeStep]?.tasks || [];
+  const progress = steps.length > 0 ? ((safeStep + 1) / steps.length) * 100 : 0;
 
   if (steps.length === 0) {
     return (
-      <div className="rounded-xl border bg-white p-6 text-gray-500 shadow-sm">
+      <div className="rounded-2xl border border-white/10 bg-white/[0.055] p-6 text-slate-400 shadow-xl backdrop-blur-xl">
         该疾病暂无工作流程。
       </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
-      <div className="rounded-xl border bg-white p-4 shadow-sm lg:col-span-1">
-        <h3 className="mb-3 text-sm font-semibold text-gray-700">工作流程</h3>
-        <div className="space-y-1">
+    <div className="grid grid-cols-1 gap-5 xl:grid-cols-[260px_minmax(0,1fr)_320px]">
+      <aside className="rounded-[24px] border border-white/10 bg-white/[0.055] p-4 shadow-[0_24px_70px_rgba(0,0,0,.22)] backdrop-blur-2xl xl:sticky xl:top-28 xl:self-start">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.2em] text-cyan-300/60">Workflow</div>
+            <h3 className="mt-1 font-semibold text-white">临床工作流</h3>
+          </div>
+          <span className="rounded-full border border-white/10 bg-slate-950/35 px-2.5 py-1 text-xs text-slate-400">
+            {safeStep + 1}/{steps.length}
+          </span>
+        </div>
+
+        <div className="mb-4 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-cyan-300 to-blue-400 transition-all duration-500"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+
+        <div className="space-y-1.5">
           {steps.map((step: any, index: number) => (
             <button
               key={step.stepId ?? index}
               onClick={() => setCurrentStep(index)}
-              className={`w-full rounded-lg px-3 py-2 text-left text-sm transition ${
+              className={`group flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm transition ${
                 index === safeStep
-                  ? "border-l-4 border-blue-600 bg-blue-50 font-medium text-blue-700"
-                  : "text-gray-600 hover:bg-gray-50"
+                  ? "border border-cyan-300/25 bg-cyan-300/[0.1] text-white shadow-[0_10px_30px_rgba(34,211,238,.08)]"
+                  : "border border-transparent text-slate-400 hover:border-white/10 hover:bg-white/[0.05] hover:text-slate-200"
               }`}
             >
-              {index + 1}. {step.title}
+              <span
+                className={`grid h-8 w-8 shrink-0 place-items-center rounded-xl text-xs font-semibold ${
+                  index === safeStep
+                    ? "bg-gradient-to-br from-cyan-300 to-blue-400 text-slate-950"
+                    : "border border-white/10 bg-slate-950/35 text-slate-500 group-hover:text-slate-300"
+                }`}
+              >
+                {String(index + 1).padStart(2, "0")}
+              </span>
+              <span className="min-w-0 truncate">{step.title || `步骤 ${index + 1}`}</span>
             </button>
           ))}
         </div>
-      </div>
+      </aside>
 
-      <div className="rounded-xl border bg-white p-6 shadow-sm lg:col-span-2">
-        <h3 className="mb-3 font-semibold text-gray-800">
-          第 {safeStep + 1} / {steps.length} 步
-        </h3>
-        <h4 className="mb-4 text-xl font-bold text-gray-800">
-          {steps[safeStep]?.title || "未命名"}
-        </h4>
-        <div className="space-y-2">
+      <section className="min-w-0 rounded-[28px] border border-white/10 bg-white/[0.06] p-5 shadow-[0_28px_90px_rgba(0,0,0,.24)] backdrop-blur-2xl sm:p-7">
+        <div className="flex flex-col gap-4 border-b border-white/10 pb-5 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-cyan-300/65">
+              Current Step
+            </div>
+            <h3 className="mt-2 text-2xl font-semibold tracking-tight text-white">
+              {steps[safeStep]?.title || "未命名步骤"}
+            </h3>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-slate-950/35 px-4 py-3 text-right">
+            <div className="text-[10px] uppercase tracking-[0.16em] text-slate-600">Progress</div>
+            <div className="mt-1 text-sm font-medium text-cyan-200">第 {safeStep + 1} 步，共 {steps.length} 步</div>
+          </div>
+        </div>
+
+        <div className="mt-5 space-y-3">
           {currentTasks.map((task: string, index: number) => (
-            <div key={index} className="flex items-start gap-3 text-gray-700">
-              <span className="text-sm font-bold text-blue-500">{index + 1}</span>
-              <span>{task}</span>
+            <div
+              key={index}
+              className="group flex items-start gap-4 rounded-2xl border border-white/10 bg-slate-950/28 p-4 transition hover:border-cyan-300/20 hover:bg-cyan-300/[0.045]"
+            >
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl border border-cyan-300/20 bg-cyan-300/[0.08] text-xs font-semibold text-cyan-200">
+                {index + 1}
+              </span>
+              <span className="pt-1 text-sm leading-6 text-slate-300 sm:text-[15px]">{task}</span>
             </div>
           ))}
         </div>
-      </div>
 
-      <div className="space-y-3 lg:col-span-1">
-        <h3 className="text-sm font-semibold text-gray-700">快速操作</h3>
+        <div className="mt-6 flex items-center justify-between gap-3 border-t border-white/10 pt-5">
+          <button
+            type="button"
+            onClick={() => setCurrentStep(Math.max(0, safeStep - 1))}
+            disabled={safeStep === 0}
+            className="rounded-xl border border-white/10 bg-white/[0.05] px-4 py-2.5 text-sm text-slate-300 transition hover:border-cyan-300/25 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+          >
+            ← 上一步
+          </button>
+          <button
+            type="button"
+            onClick={() => setCurrentStep(Math.min(steps.length - 1, safeStep + 1))}
+            disabled={safeStep === steps.length - 1}
+            className="rounded-xl bg-gradient-to-r from-cyan-300 to-blue-400 px-4 py-2.5 text-sm font-semibold text-slate-950 shadow-[0_10px_30px_rgba(34,211,238,.16)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-30"
+          >
+            下一步 →
+          </button>
+        </div>
+      </section>
+
+      <aside className="space-y-3 xl:sticky xl:top-28 xl:self-start">
+        <div className="mb-1 flex items-center justify-between px-1">
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.2em] text-cyan-300/60">Quick Tools</div>
+            <h3 className="mt-1 font-semibold text-white">快速操作</h3>
+          </div>
+        </div>
         {disease.quickActions ? (
           <>
-            <QuickActionCard
-              title="写病历"
-              content={disease.quickActions.writeMedicalRecord || "暂无模板"}
-            />
-            <QuickActionCard
-              title="开医嘱"
-              content={disease.quickActions.prescribe || "暂无模板"}
-            />
-            <QuickActionCard
-              title="拆线换药"
-              content={disease.quickActions.sutureRemoval || "暂无模板"}
-            />
-            <QuickActionCard
-              title="值班处理"
-              content={disease.quickActions.emergencyHandling || "暂无模板"}
-            />
+            <QuickActionCard title="写病历" content={disease.quickActions.writeMedicalRecord || "暂无模板"} />
+            <QuickActionCard title="开医嘱" content={disease.quickActions.prescribe || "暂无模板"} />
+            <QuickActionCard title="拆线换药" content={disease.quickActions.sutureRemoval || "暂无模板"} />
+            <QuickActionCard title="值班处理" content={disease.quickActions.emergencyHandling || "暂无模板"} />
           </>
         ) : (
-          <div className="rounded-xl border bg-white p-4 text-sm text-gray-500 shadow-sm">
+          <div className="rounded-2xl border border-white/10 bg-white/[0.055] p-4 text-sm text-slate-500 backdrop-blur-xl">
             暂无快速操作模板。
           </div>
         )}
-      </div>
+      </aside>
     </div>
   );
 }
 
 function QuickActionCard({ title, content }: { title: string; content: string }) {
   const [expanded, setExpanded] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const fallbackCopy = (text: string) => {
     const textarea = document.createElement("textarea");
@@ -744,7 +853,8 @@ function QuickActionCard({ title, content }: { title: string; content: string })
 
     try {
       document.execCommand("copy");
-      alert("已复制到剪贴板");
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
     } catch {
       alert("复制失败，请手动选择文本复制");
     }
@@ -756,7 +866,10 @@ function QuickActionCard({ title, content }: { title: string; content: string })
     if (navigator.clipboard?.writeText) {
       navigator.clipboard
         .writeText(text)
-        .then(() => alert("已复制到剪贴板"))
+        .then(() => {
+          setCopied(true);
+          window.setTimeout(() => setCopied(false), 1600);
+        })
         .catch(() => fallbackCopy(text));
     } else {
       fallbackCopy(text);
@@ -764,25 +877,28 @@ function QuickActionCard({ title, content }: { title: string; content: string })
   };
 
   return (
-    <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
+    <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.055] shadow-[0_18px_55px_rgba(0,0,0,.18)] backdrop-blur-xl transition hover:border-cyan-300/20">
       <button
         onClick={() => setExpanded((current) => !current)}
-        className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium text-gray-700 hover:bg-gray-50"
+        className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left text-sm font-medium text-slate-200 transition hover:bg-white/[0.04]"
       >
-        {title}
-        <span>{expanded ? "▲" : "▼"}</span>
+        <span className="flex items-center gap-3">
+          <span className="h-2 w-2 rounded-full bg-cyan-300 shadow-[0_0_12px_rgba(103,232,249,.65)]" />
+          {title}
+        </span>
+        <span className={`text-xs text-slate-500 transition ${expanded ? "rotate-180" : ""}`}>⌄</span>
       </button>
 
       {expanded && (
-        <div className="px-4 pb-4">
-          <pre className="whitespace-pre-wrap rounded-lg bg-gray-50 p-3 text-xs text-gray-600">
+        <div className="border-t border-white/10 px-4 pb-4 pt-3">
+          <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded-xl border border-white/8 bg-slate-950/45 p-3 text-xs leading-5 text-slate-400">
             {content}
           </pre>
           <button
             onClick={() => handleCopy(content)}
-            className="mt-2 text-xs text-blue-600 hover:text-blue-800"
+            className="mt-3 inline-flex items-center gap-2 rounded-lg border border-cyan-300/20 bg-cyan-300/[0.08] px-3 py-2 text-xs font-medium text-cyan-200 transition hover:bg-cyan-300/[0.13]"
           >
-            📋 复制
+            {copied ? "已复制" : "复制内容"}
           </button>
         </div>
       )}
@@ -861,7 +977,7 @@ function ClassificationImageCarousel({
 
   if (images.length === 0) {
     return (
-      <div className="flex aspect-video items-center justify-center bg-gray-100 text-sm text-gray-400">
+      <div className="flex aspect-video items-center justify-center bg-slate-950/50 text-sm text-slate-600">
         暂无真实影像
       </div>
     );
@@ -911,7 +1027,7 @@ function ClassificationImageCarousel({
 
   return (
     <div
-      className="group relative aspect-video overflow-hidden bg-gray-100"
+      className="group relative aspect-video overflow-hidden bg-slate-950/55"
       onWheel={handleWheel}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
@@ -937,7 +1053,7 @@ function ClassificationImageCarousel({
             classification?.type ||
             "疾病分型影像"
           }
-          className="h-full w-full object-contain"
+          className="h-full w-full object-contain transition duration-500 group-hover:scale-[1.015]"
         />
       </button>
 
@@ -1054,7 +1170,7 @@ function StudyMode({ disease }: { disease: DiseaseData }) {
   const hasCommonImages = commonImages.length > 0;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       {hasSummary && (
         <StudySection number="1" title="临床一眼看懂">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -1072,7 +1188,7 @@ function StudyMode({ disease }: { disease: DiseaseData }) {
 
             {summary.keyPoint && (
               <InfoCard title="核心理解" className="md:col-span-2">
-                <p className="font-medium text-blue-800">{summary.keyPoint}</p>
+                <p className="font-medium leading-7 text-cyan-100">{summary.keyPoint}</p>
               </InfoCard>
             )}
 
@@ -1082,7 +1198,7 @@ function StudyMode({ disease }: { disease: DiseaseData }) {
                   {differentials.map((item, index) => (
                     <span
                       key={`${item}-${index}`}
-                      className="rounded-full bg-gray-100 px-3 py-1 text-sm text-gray-700"
+                      className="rounded-full border border-white/10 bg-white/[0.055] px-3 py-1 text-sm text-slate-300"
                     >
                       {item}
                     </span>
@@ -1100,30 +1216,30 @@ function StudyMode({ disease }: { disease: DiseaseData }) {
             {physicalExams.map((exam, index) => (
               <details
                 key={`${exam.name || "exam"}-${index}`}
-                className="group rounded-xl border bg-white shadow-sm"
+                className="group overflow-hidden rounded-2xl border border-white/10 bg-white/[0.055] shadow-[0_18px_55px_rgba(0,0,0,.18)] backdrop-blur-xl"
               >
-                <summary className="cursor-pointer list-none px-5 py-4">
+                <summary className="cursor-pointer list-none px-5 py-4 transition hover:bg-white/[0.035]">
                   <div className="flex items-center justify-between gap-4">
                     <div>
-                      <h4 className="font-semibold text-gray-800">
+                      <h4 className="font-semibold text-slate-100">
                         {index + 1}. {exam.name || "未命名查体"}
                       </h4>
                       {exam.target && (
-                        <p className="mt-1 text-sm text-gray-500">
+                        <p className="mt-1 text-sm text-slate-500">
                           检查目标：{exam.target}
                         </p>
                       )}
                     </div>
-                    <span className="text-sm text-blue-600 group-open:hidden">
+                    <span className="text-sm text-cyan-300 group-open:hidden">
                       展开
                     </span>
-                    <span className="hidden text-sm text-blue-600 group-open:inline">
+                    <span className="hidden text-sm text-cyan-300 group-open:inline">
                       收起
                     </span>
                   </div>
                 </summary>
 
-                <div className="border-t px-5 py-4">
+                <div className="border-t border-white/10 px-5 py-4">
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                     {exam.method && (
                       <MiniInfo title="怎么做" text={exam.method} />
@@ -1140,7 +1256,7 @@ function StudyMode({ disease }: { disease: DiseaseData }) {
                     <button
                       type="button"
                       onClick={() => setPreviewImage(exam.imageUrl || null)}
-                      className="mt-4 block overflow-hidden rounded-lg border"
+                      className="mt-4 block overflow-hidden rounded-xl border border-white/10 bg-slate-950/45"
                     >
                       <img
                         src={exam.imageUrl}
@@ -1186,7 +1302,7 @@ function StudyMode({ disease }: { disease: DiseaseData }) {
                 return (
                   <article
                     key={classification?.id ?? index}
-                    className="overflow-hidden rounded-xl border bg-white shadow-sm"
+                    className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.055] shadow-[0_20px_60px_rgba(0,0,0,.2)] backdrop-blur-xl transition hover:-translate-y-0.5 hover:border-cyan-300/20"
                   >
                     <ClassificationImageCarousel
                       classification={classification}
@@ -1194,16 +1310,16 @@ function StudyMode({ disease }: { disease: DiseaseData }) {
                     />
 
                     <div className="p-4">
-                      <h4 className="font-semibold text-gray-800">
+                      <h4 className="font-semibold text-slate-100">
                         {classification?.type || `分型 ${index + 1}`}
                       </h4>
                       {classification?.description && (
-                        <p className="mt-1 text-sm text-gray-500">
+                        <p className="mt-1 text-sm text-slate-500">
                           {classification.description}
                         </p>
                       )}
                       {classification?.imageKeyPoints && (
-                        <div className="mt-3 rounded-lg bg-blue-50 p-3 text-sm text-blue-900">
+                        <div className="mt-3 rounded-xl border border-cyan-300/15 bg-cyan-300/[0.07] p-3 text-sm leading-6 text-cyan-100">
                           <span className="font-medium">看片要点：</span>
                           {classification.imageKeyPoints}
                         </div>
@@ -1217,7 +1333,7 @@ function StudyMode({ disease }: { disease: DiseaseData }) {
 
           {hasCommonImages && (
             <div className={hasClassifications ? "mt-6" : ""}>
-              <h4 className="mb-3 font-semibold text-gray-700">常见影像</h4>
+              <h4 className="mb-3 font-semibold text-slate-200">常见影像</h4>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {commonImages.map((image: any, index: number) => {
                   const normalized =
@@ -1234,19 +1350,19 @@ function StudyMode({ disease }: { disease: DiseaseData }) {
                       key={`${imageUrl}-${index}`}
                       type="button"
                       onClick={() => setPreviewImage(imageUrl)}
-                      className="overflow-hidden rounded-xl border bg-white text-left shadow-sm"
+                      className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.055] text-left shadow-[0_18px_55px_rgba(0,0,0,.18)] transition hover:border-cyan-300/20"
                     >
                       <img
                         src={imageUrl}
                         alt={normalized.title || `常见影像 ${index + 1}`}
-                        className="aspect-video w-full object-contain bg-gray-100"
+                        className="aspect-video w-full bg-slate-950/50 object-contain"
                       />
                       <div className="p-3">
-                        <div className="font-medium text-gray-800">
+                        <div className="font-medium text-slate-100">
                           {normalized.title || `影像 ${index + 1}`}
                         </div>
                         {normalized.description && (
-                          <p className="mt-1 text-sm text-gray-500">
+                          <p className="mt-1 text-sm text-slate-500">
                             {normalized.description}
                           </p>
                         )}
@@ -1263,7 +1379,7 @@ function StudyMode({ disease }: { disease: DiseaseData }) {
       {decisionSteps.length > 0 && (
         <StudySection number="5" title="学习型治疗决策">
           {disease.decisionFlow?.title && (
-            <h4 className="mb-4 text-lg font-semibold text-gray-800">
+            <h4 className="mb-4 text-lg font-semibold text-slate-100">
               {disease.decisionFlow.title}
             </h4>
           )}
@@ -1272,32 +1388,32 @@ function StudyMode({ disease }: { disease: DiseaseData }) {
             {decisionSteps.map((step, index) => (
               <div
                 key={step.id ?? index}
-                className="rounded-xl border bg-white p-5 shadow-sm"
+                className="rounded-2xl border border-white/10 bg-white/[0.055] p-5 shadow-[0_18px_55px_rgba(0,0,0,.18)] backdrop-blur-xl"
               >
                 <div className="flex items-start gap-3">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-300 to-blue-400 text-sm font-bold text-slate-950 shadow-[0_8px_24px_rgba(34,211,238,.16)]">
                     {index + 1}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <h5 className="font-semibold text-gray-800">
+                    <h5 className="font-semibold text-slate-100">
                       {step.question || "未填写判断问题"}
                     </h5>
                     <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
                       {step.yes && (
-                        <div className="rounded-lg bg-green-50 p-3 text-sm text-green-900">
+                        <div className="rounded-xl border border-emerald-300/15 bg-emerald-300/[0.07] p-3 text-sm leading-6 text-emerald-100">
                           <span className="font-semibold">是 → </span>
                           {step.yes}
                         </div>
                       )}
                       {step.no && (
-                        <div className="rounded-lg bg-orange-50 p-3 text-sm text-orange-900">
+                        <div className="rounded-xl border border-amber-300/15 bg-amber-300/[0.07] p-3 text-sm leading-6 text-amber-100">
                           <span className="font-semibold">否 → </span>
                           {step.no}
                         </div>
                       )}
                     </div>
                     {step.note && (
-                      <p className="mt-3 text-sm text-gray-500">
+                      <p className="mt-3 text-sm leading-6 text-slate-500">
                         为什么：{step.note}
                       </p>
                     )}
@@ -1308,7 +1424,7 @@ function StudyMode({ disease }: { disease: DiseaseData }) {
           </div>
 
           {disease.decisionFlow?.disclaimer && (
-            <p className="mt-4 rounded-lg bg-yellow-50 p-3 text-xs text-yellow-800">
+            <p className="mt-4 rounded-xl border border-amber-300/15 bg-amber-300/[0.06] p-3 text-xs leading-5 text-amber-200">
               {disease.decisionFlow.disclaimer}
             </p>
           )}
@@ -1317,15 +1433,15 @@ function StudyMode({ disease }: { disease: DiseaseData }) {
 
       {disease.surgeryTable && (
         <StudySection number="6" title="手术方案">
-          <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
+          <div className="overflow-x-auto rounded-2xl border border-white/10 bg-white/[0.055] shadow-[0_18px_55px_rgba(0,0,0,.18)] backdrop-blur-xl">
             <table className="min-w-full text-sm">
-              <thead className="bg-gray-50">
+              <thead className="bg-white/[0.035]">
                 <tr>
                   {(disease.surgeryTable.headers || []).map(
                     (header: string, index: number) => (
                       <th
                         key={index}
-                        className="whitespace-nowrap px-4 py-3 text-left font-medium text-gray-600"
+                        className="whitespace-nowrap px-4 py-3 text-left font-medium text-slate-300"
                       >
                         {header}
                       </th>
@@ -1336,11 +1452,11 @@ function StudyMode({ disease }: { disease: DiseaseData }) {
               <tbody>
                 {(disease.surgeryTable.rows || []).map(
                   (row: any[], rowIndex: number) => (
-                    <tr key={rowIndex} className="border-t border-gray-100">
+                    <tr key={rowIndex} className="border-t border-white/10">
                       {row.map((cell, cellIndex) => (
                         <td
                           key={cellIndex}
-                          className="min-w-40 px-4 py-3 align-top text-gray-700"
+                          className="min-w-40 px-4 py-3 align-top leading-6 text-slate-400"
                         >
                           {cell}
                         </td>
@@ -1360,12 +1476,12 @@ function StudyMode({ disease }: { disease: DiseaseData }) {
             {disease.rehabPlan.map((item: any, index: number) => (
               <div
                 key={index}
-                className="rounded-xl border bg-white p-4 shadow-sm"
+                className="rounded-2xl border border-white/10 bg-white/[0.055] p-4 shadow-[0_16px_50px_rgba(0,0,0,.16)] backdrop-blur-xl"
               >
-                <div className="text-sm font-medium text-blue-600">
+                <div className="text-sm font-medium text-cyan-300">
                   {item.phase}
                 </div>
-                <div className="mt-1 text-sm text-gray-700">
+                <div className="mt-1 text-sm leading-6 text-slate-400">
                   {item.content}
                 </div>
               </div>
@@ -1382,14 +1498,14 @@ function StudyMode({ disease }: { disease: DiseaseData }) {
         decisionSteps.length === 0 &&
         !disease.surgeryTable &&
         (!Array.isArray(disease.rehabPlan) || disease.rehabPlan.length === 0) && (
-          <div className="rounded-xl border bg-white p-6 text-gray-500 shadow-sm">
+          <div className="rounded-2xl border border-white/10 bg-white/[0.055] p-6 text-slate-500 shadow-xl backdrop-blur-xl">
             该疾病暂无学习内容。
           </div>
         )}
 
       {previewImage && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#020711]/90 p-4 backdrop-blur-md"
           onClick={() => setPreviewImage(null)}
           role="dialog"
           aria-modal="true"
@@ -1397,14 +1513,14 @@ function StudyMode({ disease }: { disease: DiseaseData }) {
           <button
             type="button"
             onClick={() => setPreviewImage(null)}
-            className="absolute right-5 top-5 rounded-full bg-white/90 px-3 py-1 text-sm font-medium text-gray-700"
+            className="absolute right-5 top-5 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-medium text-white backdrop-blur-xl"
           >
             关闭
           </button>
           <img
             src={previewImage}
             alt="放大影像"
-            className="max-h-[90vh] max-w-[95vw] rounded-lg bg-white object-contain"
+            className="max-h-[90vh] max-w-[95vw] rounded-2xl border border-white/10 bg-slate-950 object-contain shadow-[0_30px_100px_rgba(0,0,0,.55)]"
             onClick={(event) => event.stopPropagation()}
           />
         </div>
@@ -1424,11 +1540,15 @@ function StudySection({
 }) {
   return (
     <section>
-      <div className="mb-4 flex items-center gap-3">
-        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
+      <div className="mb-5 flex items-center gap-3">
+        <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-cyan-300 to-blue-400 text-sm font-bold text-slate-950 shadow-[0_8px_24px_rgba(34,211,238,.16)]">
           {number}
         </span>
-        <h3 className="text-lg font-semibold text-gray-800">{title}</h3>
+        <div>
+          <div className="text-[10px] uppercase tracking-[0.2em] text-cyan-300/55">Study Module</div>
+          <h3 className="mt-0.5 text-lg font-semibold text-white">{title}</h3>
+        </div>
+        <div className="ml-2 h-px flex-1 bg-gradient-to-r from-white/10 to-transparent" />
       </div>
       {children}
     </section>
@@ -1445,28 +1565,31 @@ function InfoCard({
   className?: string;
 }) {
   return (
-    <div className={`rounded-xl border bg-white p-5 shadow-sm ${className}`}>
-      <h4 className="mb-3 font-semibold text-gray-800">{title}</h4>
-      <div className="text-sm leading-6 text-gray-700">{children}</div>
+    <div className={`rounded-2xl border border-white/10 bg-white/[0.055] p-5 shadow-[0_18px_55px_rgba(0,0,0,.18)] backdrop-blur-xl ${className}`}>
+      <div className="mb-3 flex items-center gap-2">
+        <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_10px_rgba(103,232,249,.7)]" />
+        <h4 className="font-semibold text-slate-100">{title}</h4>
+      </div>
+      <div className="text-sm leading-6 text-slate-400">{children}</div>
     </div>
   );
 }
 
 function MiniInfo({ title, text }: { title: string; text: string }) {
   return (
-    <div className="rounded-lg bg-gray-50 p-3">
-      <div className="mb-1 text-sm font-semibold text-gray-700">{title}</div>
-      <p className="text-sm leading-6 text-gray-600">{text}</p>
+    <div className="rounded-xl border border-white/10 bg-slate-950/30 p-3.5">
+      <div className="mb-1 text-sm font-semibold text-cyan-200">{title}</div>
+      <p className="text-sm leading-6 text-slate-400">{text}</p>
     </div>
   );
 }
 
 function BulletList({ items }: { items: string[] }) {
   return (
-    <ul className="space-y-2">
+    <ul className="space-y-2.5">
       {items.map((item, index) => (
-        <li key={`${item}-${index}`} className="flex items-start gap-2">
-          <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
+        <li key={`${item}-${index}`} className="flex items-start gap-2.5">
+          <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-cyan-300 shadow-[0_0_8px_rgba(103,232,249,.55)]" />
           <span>{item}</span>
         </li>
       ))}
