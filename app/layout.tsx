@@ -1,11 +1,13 @@
-import { Analytics } from "@vercel/analytics/next"
 import type { Metadata, Viewport } from "next"
 import { Geist } from "next/font/google"
 import { ThemeProvider } from "@/components/theme-provider"
+import SiteAnalytics from "@/components/SiteAnalytics"
 import { Toaster } from "sonner"
 import "./globals.css"
 
-const geist = Geist({ subsets: ["latin"] })
+const geist = Geist({
+  subsets: ["latin"],
+})
 
 export const metadata: Metadata = {
   title: "OrthoFlow · 骨科轮转工作助手",
@@ -28,18 +30,26 @@ export const viewport: Viewport = {
   userScalable: false,
   colorScheme: "light dark",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#28282e" },
+    {
+      media: "(prefers-color-scheme: light)",
+      color: "#ffffff",
+    },
+    {
+      media: "(prefers-color-scheme: dark)",
+      color: "#28282e",
+    },
   ],
 }
 
-// 避免暗色模式闪烁：在页面渲染前同步应用主题
 const themeInitScript = `
 (function() {
   try {
-    var t = localStorage.getItem('orthoflow-theme');
-    if (t === 'dark') document.documentElement.classList.add('dark');
-  } catch (e) {}
+    var theme = localStorage.getItem("orthoflow-theme");
+
+    if (theme === "dark") {
+      document.documentElement.classList.add("dark");
+    }
+  } catch (error) {}
 })();
 `
 
@@ -49,14 +59,28 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="zh-CN" className="bg-background" suppressHydrationWarning>
+    <html
+      lang="zh-CN"
+      className="bg-background"
+      suppressHydrationWarning
+    >
       <head>
-        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: themeInitScript,
+          }}
+        />
       </head>
+
       <body className={`${geist.className} antialiased`}>
         <ThemeProvider>{children}</ThemeProvider>
-        <Toaster position="top-center" richColors />
-        {process.env.NODE_ENV === "production" && <Analytics />}
+
+        <Toaster
+          position="top-center"
+          richColors
+        />
+
+        {process.env.NODE_ENV === "production" && <SiteAnalytics />}
       </body>
     </html>
   )
