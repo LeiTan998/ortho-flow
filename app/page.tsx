@@ -1,6 +1,7 @@
 "use client";
 
 import { supabase } from "@/lib/supabase";
+import FeedbackHub from "@/components/feedback/FeedbackHub";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 type LearningSummary = {
@@ -292,6 +293,13 @@ export default function Home() {
         <footer className="relative z-10 mx-auto max-w-[1500px] px-4 pb-8 pt-3 text-center text-[11px] leading-5 text-slate-600 sm:px-6 lg:px-8">
           OrthoFlow用于临床学习与工作辅助，不能替代上级医师判断、患者个体化评估及本院诊疗规范。
         </footer>
+
+        <FeedbackHub
+          diseaseId={selectedDisease.id}
+          diseaseName={selectedDisease.name}
+          searchQuery=""
+          searchResultCount={0}
+        />
       </div>
     );
   }
@@ -624,6 +632,13 @@ export default function Home() {
       <div className="relative z-10 mx-auto max-w-7xl px-4 pb-6 text-center text-[11px] leading-5 text-slate-600 sm:px-6 lg:px-8">
         OrthoFlow用于临床学习与工作辅助，不能替代上级医师判断、患者个体化评估及本院诊疗规范。
       </div>
+
+      <FeedbackHub
+        diseaseId={null}
+        diseaseName={null}
+        searchQuery={searchTerm}
+        searchResultCount={filteredDiseases.length}
+      />
 
       <style jsx>{`
         .hero-orb {
