@@ -118,6 +118,28 @@ const REASON_OPTIONS = [
   "其他",
 ]
 
+
+const SEARCH_ANALYTICS_OPTOUT_KEY = "orthoflow-search-analytics-optout"
+
+function isSearchAnalyticsOptedOut(): boolean {
+  if (typeof window === "undefined") return false
+
+  const params = new URLSearchParams(window.location.search)
+  const internal = params.get("internal")
+
+  if (internal === "1") {
+    window.localStorage.setItem(SEARCH_ANALYTICS_OPTOUT_KEY, "1")
+    return true
+  }
+
+  if (internal === "0") {
+    window.localStorage.removeItem(SEARCH_ANALYTICS_OPTOUT_KEY)
+    return false
+  }
+
+  return window.localStorage.getItem(SEARCH_ANALYTICS_OPTOUT_KEY) === "1"
+}
+
 function getPageUrl(): string {
   return typeof window === "undefined" ? "" : window.location.href
 }
@@ -173,6 +195,7 @@ export default function FeedbackHub({
 
   useEffect(() => {
     const query = searchQuery.trim()
+    if (isSearchAnalyticsOptedOut()) return
     if (query.length < 2 || typeof searchResultCount !== "number") return
     if (lastSearchSignature.current === searchSignature) return
 
@@ -242,7 +265,11 @@ export default function FeedbackHub({
         },
       })
 
-      if (draft.feedbackType === "search_request" && searchQuery.trim()) {
+      if (
+        draft.feedbackType === "search_request" &&
+        searchQuery.trim() &&
+        !isSearchAnalyticsOptedOut()
+      ) {
         await postJson("/api/search-log", {
           query: searchQuery.trim(),
           resultCount: searchResultCount ?? 0,
