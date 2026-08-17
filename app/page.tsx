@@ -59,6 +59,65 @@ type DiseaseData = {
   decisionFlow?: DecisionFlow;
 };
 
+
+const SEARCH_ANALYTICS_OPTOUT_KEY = "orthoflow-search-analytics-optout";
+const SEARCH_SESSION_KEY = "orthoflow-feedback-session-id";
+
+function getSearchSessionId(): string {
+  if (typeof window === "undefined") return "";
+  const existing = window.sessionStorage.getItem(SEARCH_SESSION_KEY);
+  if (existing) return existing;
+  const created = crypto.randomUUID();
+  window.sessionStorage.setItem(SEARCH_SESSION_KEY, created);
+  return created;
+}
+
+function isSearchAnalyticsOptedOut(): boolean {
+  if (typeof window === "undefined") return false;
+
+  const params = new URLSearchParams(window.location.search);
+  const internal = params.get("internal");
+
+  if (internal === "1") {
+    window.localStorage.setItem(SEARCH_ANALYTICS_OPTOUT_KEY, "1");
+    return true;
+  }
+
+  if (internal === "0") {
+    window.localStorage.removeItem(SEARCH_ANALYTICS_OPTOUT_KEY);
+    return false;
+  }
+
+  return window.localStorage.getItem(SEARCH_ANALYTICS_OPTOUT_KEY) === "1";
+}
+
+async function logSearchClick(
+  query: string,
+  resultCount: number,
+  clickedDiseaseId: string
+) {
+  if (typeof window === "undefined") return;
+  if (isSearchAnalyticsOptedOut()) return;
+  if (query.trim().length < 2) return;
+
+  try {
+    await fetch("/api/search-log", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "click",
+        query: query.trim(),
+        resultCount,
+        clickedDiseaseId,
+        pageUrl: window.location.href,
+        sessionId: getSearchSessionId(),
+      }),
+    });
+  } catch (error) {
+    console.error("记录搜索点击失败:", error);
+  }
+}
+
 const isUsableImageUrl = (url?: string) =>
   Boolean(
     url &&
@@ -111,12 +170,26 @@ export default function Home() {
     disease: DiseaseData,
     countAsSearch: boolean
   ) => {
+    // 必须先保存搜索词和结果数，再清空搜索框。
+    const queryAtClick = searchTerm.trim();
+    const resultCountAtClick = filteredDiseases.length;
+    const analyticsOptedOut = isSearchAnalyticsOptedOut();
+
     setSelectedDisease(disease);
     setCurrentStep(0);
     setMode("work");
     setSearchTerm("");
 
     if (!countAsSearch) return;
+
+    // 当前设备若被标记为内部测试设备：
+    // 既不写 search_logs，也不增加 view_count，避免污染真实用户数据。
+    if (analyticsOptedOut) return;
+
+    // 将这次“搜索 → 点击疾病”写回 search_logs.clicked_disease_id。
+    // 如果 1 秒自动搜索日志已经存在，API 会更新那一条；
+    // 如果用户点击很快、自动日志还没写入，API 会直接补一条点击日志。
+    void logSearchClick(queryAtClick, resultCountAtClick, disease.id);
 
     const { error } = await supabase.rpc("increment_disease_view", {
       p_disease_id: disease.id,
