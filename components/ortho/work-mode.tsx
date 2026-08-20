@@ -11,7 +11,7 @@ export function WorkMode({ disease, currentStep, setCurrentStep }: any) {
 
   if (steps.length === 0) {
     return (
-      <div className="rounded-2xl border border-[var(--of-border)] bg-[var(--of-surface)] p-6 text-[var(--of-muted)] shadow-xl backdrop-blur-xl">
+      <div className="rounded-2xl border border-[var(--of-border)] bg-[var(--of-surface-solid)] p-6 text-[var(--of-muted)] shadow-xl">
         该疾病暂无工作流程。
       </div>
     );
@@ -19,7 +19,7 @@ export function WorkMode({ disease, currentStep, setCurrentStep }: any) {
 
   return (
     <div className="grid grid-cols-1 gap-5 xl:grid-cols-[220px_minmax(0,1fr)_260px]">
-      <aside className="rounded-[24px] border border-[var(--of-border)] bg-[var(--of-surface)] p-4 shadow-[0_16px_50px_rgba(39,76,79,.07)] backdrop-blur-2xl xl:sticky xl:top-28 xl:self-start">
+      <aside className="rounded-[24px] border border-[var(--of-border)] bg-[var(--of-surface-solid)] p-4 shadow-[0_16px_50px_rgba(39,76,79,.07)] xl:sticky xl:top-28 xl:self-start">
         <div className="mb-4 flex items-center justify-between">
           <div>
             <div className="text-[10px] uppercase tracking-[0.2em] text-[var(--of-accent)]/60">Workflow</div>
@@ -30,7 +30,7 @@ export function WorkMode({ disease, currentStep, setCurrentStep }: any) {
           </span>
         </div>
 
-        <div className="mb-4 h-1.5 overflow-hidden rounded-full bg-[var(--of-surface)]">
+        <div className="mb-4 h-1.5 overflow-hidden rounded-full bg-[var(--of-surface-solid)]">
           <div
             className="h-full rounded-full bg-gradient-to-r from-cyan-300 to-blue-400 transition-all duration-500"
             style={{ width: `${progress}%` }}
@@ -44,7 +44,7 @@ export function WorkMode({ disease, currentStep, setCurrentStep }: any) {
               onClick={() => setCurrentStep(index)}
               className={`group flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm transition ${
                 index === safeStep
-                  ? "border border-[#B6DEE2] bg-[var(--of-accent-soft)] text-white shadow-[0_10px_30px_rgba(34,211,238,.08)]"
+                  ? "border border-[#B6DEE2] bg-[var(--of-accent-soft)] text-[var(--of-text-strong)] shadow-[0_10px_30px_rgba(34,211,238,.08)]"
                   : "border border-transparent text-[var(--of-muted)] hover:border-[var(--of-border)] hover:bg-[var(--of-surface-muted)] hover:text-[var(--of-text-strong)]"
               }`}
             >
@@ -63,7 +63,7 @@ export function WorkMode({ disease, currentStep, setCurrentStep }: any) {
         </div>
       </aside>
 
-      <section className="min-w-0 rounded-[28px] border border-[var(--of-border)] bg-[var(--of-surface)] p-5 shadow-[0_20px_70px_rgba(39,76,79,.08)] backdrop-blur-2xl sm:p-7">
+      <section className="min-w-0 rounded-[28px] border border-[var(--of-border)] bg-[var(--of-surface-solid)] p-5 shadow-[0_20px_70px_rgba(39,76,79,.08)] sm:p-7">
         <div className="flex flex-col gap-4 border-b border-[var(--of-border)] pb-5 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--of-accent)]/65">
@@ -85,7 +85,7 @@ export function WorkMode({ disease, currentStep, setCurrentStep }: any) {
             return (
               <div
                 key={index}
-                className="group flex items-start gap-4 rounded-2xl border border-[var(--of-border)] bg-[var(--of-surface)] p-4 transition hover:-translate-y-0.5 hover:border-[#B9DDE1] hover:bg-[var(--of-surface)]"
+                className="group flex items-start gap-4 rounded-2xl border border-[var(--of-border)] bg-[var(--of-surface-solid)] p-4 transition hover:-translate-y-0.5 hover:border-[#B9DDE1] hover:bg-[var(--of-surface-solid)]"
               >
                 <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl border border-[var(--of-accent-border)] bg-[var(--of-accent-soft)] text-xs font-semibold text-[var(--of-accent)]">
                   {index + 1}
@@ -140,7 +140,7 @@ export function WorkMode({ disease, currentStep, setCurrentStep }: any) {
             <QuickActionCard title="值班处理" content={disease.quickActions.emergencyHandling || "暂无模板"} />
           </>
         ) : (
-          <div className="rounded-2xl border border-[var(--of-border)] bg-[var(--of-surface)] p-4 text-sm text-[var(--of-muted)] backdrop-blur-xl">
+          <div className="rounded-2xl border border-[var(--of-border)] bg-[var(--of-surface-solid)] p-4 text-sm text-[var(--of-muted)]">
             暂无快速操作模板。
           </div>
         )}
@@ -188,10 +188,10 @@ function QuickActionCard({ title, content }: { title: string; content: string })
   };
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-[var(--of-border)] bg-[var(--of-surface)] shadow-[0_14px_42px_rgba(39,76,79,.07)] backdrop-blur-xl transition hover:border-[var(--of-accent-border)]">
+    <div className="overflow-hidden rounded-2xl border border-[var(--of-border)] bg-[var(--of-surface-solid)] shadow-[0_14px_42px_rgba(39,76,79,.07)] transition hover:border-[var(--of-accent-border)]">
       <button
         onClick={() => setExpanded((current) => !current)}
-        className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left text-sm font-medium text-[var(--of-text-strong)] transition hover:bg-[var(--of-surface)]"
+        className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left text-sm font-medium text-[var(--of-text-strong)] transition hover:bg-[var(--of-surface-solid)]"
       >
         <span className="flex items-center gap-3">
           <span className="h-2 w-2 rounded-full bg-cyan-300 shadow-[0_0_12px_rgba(103,232,249,.65)]" />

@@ -475,13 +475,13 @@ export function StudyMode({ disease }: { disease: DiseaseData }) {
                       </h5>
                       <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
                         {step.yes && (
-                          <div className="rounded-xl border border-[#BFDCCF] bg-[#EDF8F2] p-3 text-sm leading-6 text-[#2D6A4F]">
+                          <div className="rounded-xl border border-[var(--of-success-border)] bg-[var(--of-success-bg)] p-3 text-sm leading-6 text-[var(--of-success-text)]">
                             <span className="font-semibold">是 → </span>
                             {step.yes}
                           </div>
                         )}
                         {step.no && (
-                          <div className="rounded-xl border border-[#E7D5AA] bg-[#FFF8E8] p-3 text-sm leading-6 text-[#7A5A16]">
+                          <div className="rounded-xl border border-[var(--of-warning-border)] bg-[var(--of-warning-bg)] p-3 text-sm leading-6 text-[var(--of-warning-text)]">
                             <span className="font-semibold">否 → </span>
                             {step.no}
                           </div>
@@ -499,7 +499,7 @@ export function StudyMode({ disease }: { disease: DiseaseData }) {
             </div>
 
             {disease.decisionFlow?.disclaimer && (
-              <p className="mt-4 rounded-xl border border-[#E7D5AA] bg-[#FFF8E8] p-3 text-xs leading-5 text-[#7A5A16]">
+              <p className="mt-4 rounded-xl border border-[var(--of-warning-border)] bg-[var(--of-warning-bg)] p-3 text-xs leading-5 text-[var(--of-warning-text)]">
                 {disease.decisionFlow.disclaimer}
               </p>
             )}
@@ -729,7 +729,7 @@ function ClassificationGroup({
                   </div>
                 )}
                 {classification?.note && (
-                  <div className="mt-3 rounded-xl border border-[#E8D9B4] bg-[#FFF9EC] p-3 text-sm leading-6 text-[#7A5A16]">
+                  <div className="mt-3 rounded-xl border border-[var(--of-warning-border)] bg-[var(--of-warning-bg)] p-3 text-sm leading-6 text-[var(--of-warning-text)]">
                     <span className="font-semibold">临床提醒：</span>
                     {classification.note}
                   </div>
@@ -786,9 +786,9 @@ function InfoCard({
     tone === "action"
       ? "border-[#C7E4E7] bg-[var(--of-accent-soft)]"
       : tone === "warning"
-        ? "border-[#E7D6AC] bg-[#FFF9EC]"
+        ? "border-[var(--of-warning-border)] bg-[var(--of-warning-bg)]"
         : tone === "danger"
-          ? "border-[#EBCBCB] bg-[#FFF2F2]"
+          ? "border-[var(--of-danger-border)] bg-[var(--of-danger-bg)]"
           : "border-[var(--of-border)] bg-[var(--of-surface)]";
 
   const dotClass =
@@ -800,9 +800,9 @@ function InfoCard({
 
   const textClass =
     tone === "warning"
-      ? "text-[#6F581F]"
+      ? "text-[var(--of-warning-text)]"
       : tone === "danger"
-        ? "text-[#8E4141]"
+        ? "text-[var(--of-danger-text)]"
         : tone === "action"
           ? "text-[var(--of-accent)]"
           : "text-[var(--of-muted)]";

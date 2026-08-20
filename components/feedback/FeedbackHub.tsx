@@ -322,16 +322,16 @@ export default function FeedbackHub({
       )}
 
       {diseaseId && (
-        <section className="mt-8 rounded-2xl border border-white/15 bg-slate-900/75 p-5 text-slate-100">
-          <p className="font-semibold">这页是否解决了你刚才的问题？</p>
-          <p className="mt-1 text-sm text-slate-400">
-            反馈只需几秒，用于决定下一步优先改什么。
-          </p>
-          <div className="mt-4 flex flex-wrap gap-2">
+        <section className="mt-6 rounded-2xl border border-[var(--of-border)] bg-[var(--of-surface-solid)] px-4 py-3 text-[var(--of-text)] shadow-[0_10px_32px_rgba(39,76,79,.08)] dark:shadow-[0_10px_32px_rgba(0,0,0,.24)] sm:flex sm:items-center sm:justify-between sm:gap-4">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-[var(--of-text-strong)]">这页解决你的问题了吗？</p>
+            <p className="mt-0.5 text-xs text-[var(--of-muted)]">反馈用于决定下一步优先改什么。</p>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2 sm:mt-0 sm:justify-end">
             <button
               type="button"
               onClick={() => void submitSolved()}
-              className="rounded-xl border border-emerald-400/50 px-4 py-2 text-sm text-emerald-100 transition hover:bg-emerald-400/10"
+              className="rounded-lg border border-[var(--of-success-border)] bg-[var(--of-success-bg)] px-3 py-1.5 text-xs font-medium text-[var(--of-success-text)] transition hover:brightness-95 dark:hover:brightness-110"
             >
               解决了
             </button>
@@ -343,7 +343,7 @@ export default function FeedbackHub({
                   feedbackType: "content",
                 })
               }
-              className="rounded-xl border border-slate-500 px-4 py-2 text-sm transition hover:bg-slate-800"
+              className="rounded-lg border border-[var(--of-border)] bg-[var(--of-surface-muted)] px-3 py-1.5 text-xs font-medium text-[var(--of-muted)] transition hover:text-[var(--of-text-strong)]"
             >
               部分解决
             </button>
@@ -352,24 +352,24 @@ export default function FeedbackHub({
               onClick={() =>
                 openForm({ resultStatus: "unsolved", feedbackType: "content" })
               }
-              className="rounded-xl border border-rose-400/50 px-4 py-2 text-sm text-rose-100 transition hover:bg-rose-400/10"
+              className="rounded-lg border border-[var(--of-danger-border)] bg-[var(--of-danger-bg)] px-3 py-1.5 text-xs font-medium text-[var(--of-danger-text)] transition hover:brightness-95 dark:hover:brightness-110"
             >
-              没有解决
+              没解决
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                openForm({
+                  feedbackType: "medical_error",
+                  severity: "high",
+                  taskType: "disease_learning",
+                })
+              }
+              className="px-1 py-1.5 text-xs font-medium text-[var(--of-muted)] underline-offset-4 hover:text-[var(--of-danger-text)] hover:underline"
+            >
+              纠错 / 举报
             </button>
           </div>
-          <button
-            type="button"
-            onClick={() =>
-              openForm({
-                feedbackType: "medical_error",
-                severity: "high",
-                taskType: "disease_learning",
-              })
-            }
-            className="mt-4 text-sm font-medium text-rose-300 underline-offset-4 hover:underline"
-          >
-            医学纠错 / 隐私与版权举报
-          </button>
         </section>
       )}
 
