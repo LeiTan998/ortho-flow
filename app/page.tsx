@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import WorkMode from "@/components/ortho/work-mode";
 import StudyMode from "@/components/ortho/study-mode";
+import ProcedureMode from "@/components/ortho/procedure-mode";
 import { ThemeToggle } from "@/components/theme-toggle";
 import type { DiseaseData, DiseaseMode } from "@/types/orthoflow";
 import { isSearchAnalyticsOptedOut, logSearchClick } from "@/lib/searchAnalytics";
@@ -118,6 +119,12 @@ export default function Home() {
     [diseaseList]
   );
 
+  const selectedDiseaseHasProcedures = Boolean(
+    selectedDisease &&
+      Array.isArray(selectedDisease.procedureRefs) &&
+      selectedDisease.procedureRefs.length > 0
+  );
+
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -184,26 +191,38 @@ export default function Home() {
             <div className="flex items-center gap-2">
               <ThemeToggle />
               <div className="flex w-full gap-2 rounded-2xl border border-[var(--of-border)] bg-[var(--of-surface-muted)] p-1.5 shadow-inner shadow-[#AFC6C2]/25 lg:w-auto">
-              <button
-                onClick={() => setMode("work")}
-                className={`flex-1 rounded-xl px-5 py-2.5 text-sm font-medium transition lg:flex-none ${
-                  mode === "work"
-                    ? "bg-gradient-to-r from-[#20A6B9] to-[#4B8EE8] text-white shadow-[0_8px_24px_rgba(32,166,185,.18)]"
-                    : "text-[var(--of-muted)] hover:bg-[var(--of-surface)] hover:text-[var(--of-text)]"
-                }`}
-              >
-                今天上班
-              </button>
-              <button
-                onClick={() => setMode("study")}
-                className={`flex-1 rounded-xl px-5 py-2.5 text-sm font-medium transition lg:flex-none ${
-                  mode === "study"
-                    ? "bg-gradient-to-r from-[#20A6B9] to-[#4B8EE8] text-white shadow-[0_8px_24px_rgba(32,166,185,.18)]"
-                    : "text-[var(--of-muted)] hover:bg-[var(--of-surface)] hover:text-[var(--of-text)]"
-                }`}
-              >
-                我要学习
-              </button>
+                <button
+                  onClick={() => setMode("work")}
+                  className={`flex-1 rounded-xl px-5 py-2.5 text-sm font-medium transition lg:flex-none ${
+                    mode === "work"
+                      ? "bg-gradient-to-r from-[#20A6B9] to-[#4B8EE8] text-white shadow-[0_8px_24px_rgba(32,166,185,.18)]"
+                      : "text-[var(--of-muted)] hover:bg-[var(--of-surface)] hover:text-[var(--of-text)]"
+                  }`}
+                >
+                  今天上班
+                </button>
+                <button
+                  onClick={() => setMode("study")}
+                  className={`flex-1 rounded-xl px-5 py-2.5 text-sm font-medium transition lg:flex-none ${
+                    mode === "study"
+                      ? "bg-gradient-to-r from-[#20A6B9] to-[#4B8EE8] text-white shadow-[0_8px_24px_rgba(32,166,185,.18)]"
+                      : "text-[var(--of-muted)] hover:bg-[var(--of-surface)] hover:text-[var(--of-text)]"
+                  }`}
+                >
+                  我要学习
+                </button>
+                {selectedDiseaseHasProcedures && (
+                  <button
+                    onClick={() => setMode("procedure")}
+                    className={`flex-1 rounded-xl px-5 py-2.5 text-sm font-medium transition lg:flex-none ${
+                      mode === "procedure"
+                        ? "bg-gradient-to-r from-[#20A6B9] to-[#4B8EE8] text-white shadow-[0_8px_24px_rgba(32,166,185,.18)]"
+                        : "text-[var(--of-muted)] hover:bg-[var(--of-surface)] hover:text-[var(--of-text)]"
+                    }`}
+                  >
+                    手术 Pro
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -214,20 +233,22 @@ export default function Home() {
             <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
               <div>
                 <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[var(--of-accent)]/70">
-                  OrthoFlow · {mode === "work" ? "Workflow Mode" : "Study Mode"}
+                  OrthoFlow · {mode === "work" ? "Workflow Mode" : mode === "study" ? "Study Mode" : "Procedure Pro"}
                 </div>
                 <h2 className="mt-3 text-2xl font-semibold tracking-tight text-[var(--of-text-strong)] sm:text-3xl">
-                  {mode === "work" ? "把临床任务拆成清晰步骤" : "把查体、影像与治疗决策连起来"}
+                  {mode === "work" ? "把临床任务拆成清晰步骤" : mode === "study" ? "把查体、影像与治疗决策连起来" : "把上台前最需要的手术主线放到一个页面"}
                 </h2>
                 <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--of-muted)]">
                   {mode === "work"
                     ? "沿着接诊、检查、诊断、治疗和随访逐步推进，减少遗漏，同时保留临床判断空间。"
-                    : "先看典型患者，再抓关键查体与影像，最后理解为什么选择某种治疗或手术。"}
+                    : mode === "study"
+                      ? "先看典型患者，再抓关键查体与影像，最后理解为什么选择某种治疗或手术。"
+                      : "围绕术前看片、体位、C臂、入路、复位顺序、固定与失败模式完成术前认知准备。"}
                 </p>
               </div>
               <div className="grid grid-cols-3 gap-2 text-center sm:min-w-[360px]">
                 {[
-                  ["模式", mode === "work" ? "临床执行" : "系统学习"],
+                  ["模式", mode === "work" ? "临床执行" : mode === "study" ? "系统学习" : "手术准备"],
                   ["主题", selectedDisease.name],
                   ["状态", "内容已载入"],
                 ].map(([label, value]) => (
@@ -246,8 +267,10 @@ export default function Home() {
               currentStep={currentStep}
               setCurrentStep={setCurrentStep}
             />
-          ) : (
+          ) : mode === "study" ? (
             <StudyMode disease={selectedDisease} />
+          ) : (
+            <ProcedureMode disease={selectedDisease} />
           )}
         </main>
 

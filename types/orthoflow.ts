@@ -40,6 +40,44 @@ export type WorkflowStep = {
   tasks?: string[];
 };
 
+export type ProcedureRef = {
+  id: string;
+  name: string;
+  englishName?: string;
+  summary?: string;
+  pro?: boolean;
+  status?: "preview" | "published" | "updating";
+};
+
+export type ApproachRef = {
+  id: string;
+  name: string;
+  englishName?: string;
+};
+
+export type ProcedureData = {
+  id: string;
+  name: string;
+  englishName?: string;
+  relatedDiseaseIds?: string[];
+  summary?: string;
+  indications?: string[];
+  contraindications?: string[];
+  preopImaging?: string[];
+  positioning?: string[];
+  cArm?: string[];
+  instruments?: string[];
+  approachRefs?: ApproachRef[];
+  reductionSequence?: string[];
+  fixationStrategy?: string[];
+  intraopChecks?: string[];
+  failureModes?: string[];
+  bailout?: string[];
+  postopFramework?: string[];
+  evidenceUpdatedAt?: string;
+  reviewStatus?: "draft" | "evidence_checked" | "human_reviewed";
+};
+
 export type DiseaseData = {
   id: string;
   name: string;
@@ -66,9 +104,9 @@ export type DiseaseData = {
   imagingGuide?: ImagingGuide;
   decisionFlow?: DecisionFlow;
   templateVersion?: string;
-  procedureRefs?: any[];
-  approachRefs?: any[];
+  procedureRefs?: ProcedureRef[];
+  approachRefs?: ApproachRef[];
   patientView?: any;
 };
 
-export type DiseaseMode = "work" | "study";
+export type DiseaseMode = "work" | "study" | "procedure";
