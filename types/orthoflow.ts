@@ -53,6 +53,28 @@ export type ApproachRef = {
   id: string;
   name: string;
   englishName?: string;
+  when?: string;
+  why?: string;
+  stopPoint?: string;
+};
+
+export type ProcedureFailureMode = {
+  problem: string;
+  whyItHappens?: string;
+  prevention?: string;
+  bailout?: string;
+};
+
+export type EvidenceClaim = {
+  id: string;
+  claim: string;
+  evidenceVerified: "true" | "partial" | "false";
+  sourceType?: string;
+  sourceTitle?: string;
+  sourceUrl?: string;
+  sourceIdentifier?: string;
+  contextLimit?: string;
+  finalWording?: string;
 };
 
 export type ProcedureData = {
@@ -61,19 +83,28 @@ export type ProcedureData = {
   englishName?: string;
   relatedDiseaseIds?: string[];
   summary?: string;
-  indications?: string[];
-  contraindications?: string[];
+  scope?: string;
+  goals?: string[];
+  indicationScenarios?: string[];
+  notSuitableScenarios?: string[];
   preopImaging?: string[];
   positioning?: string[];
   cArm?: string[];
   instruments?: string[];
   approachRefs?: ApproachRef[];
+  dangerStructures?: string[];
   reductionSequence?: string[];
   fixationStrategy?: string[];
   intraopChecks?: string[];
-  failureModes?: string[];
-  bailout?: string[];
-  postopFramework?: string[];
+  failureModes?: ProcedureFailureMode[];
+  postopFramework?: {
+    monitoring?: string[];
+    rom?: string[];
+    weightBearing?: string[];
+    followUp?: string[];
+  };
+  evidenceClaims?: EvidenceClaim[];
+  localPracticeNote?: string;
   evidenceUpdatedAt?: string;
   reviewStatus?: "draft" | "evidence_checked" | "human_reviewed";
 };
