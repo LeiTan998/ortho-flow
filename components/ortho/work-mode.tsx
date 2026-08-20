@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { DiseaseData } from "@/types/orthoflow";
 
-export default function WorkMode({ disease, currentStep, setCurrentStep }: any) {
+export function WorkMode({ disease, currentStep, setCurrentStep }: any) {
   const steps = disease.workflowSteps || [];
   const safeStep = Math.min(currentStep, Math.max(steps.length - 1, 0));
   const currentTasks = steps[safeStep]?.tasks || [];
@@ -216,3 +216,6 @@ function QuickActionCard({ title, content }: { title: string; content: string })
     </div>
   );
 }
+
+
+export default WorkMode

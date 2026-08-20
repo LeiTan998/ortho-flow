@@ -228,7 +228,7 @@ function ClassificationImageCarousel({
   );
 }
 
-export default function StudyMode({ disease }: { disease: DiseaseData }) {
+export function StudyMode({ disease }: { disease: DiseaseData }) {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   const summary = disease.learningSummary || {};
@@ -847,3 +847,6 @@ function BulletList({ items }: { items: string[] }) {
     </ul>
   );
 }
+
+
+export default StudyMode

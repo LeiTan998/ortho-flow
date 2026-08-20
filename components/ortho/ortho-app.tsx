@@ -7,11 +7,8 @@ import { type DiseaseData } from "@/lib/mock-disease-data"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { HomeView } from "@/components/ortho/home-view"
 import { DiseaseSearch } from "@/components/ortho/disease-search"
-import { WorkflowRail } from "@/components/ortho/workflow-rail"
 import { WorkMode } from "@/components/ortho/work-mode"
-import { WorkQuickActions } from "@/components/ortho/work-quick-actions"
 import { StudyMode } from "@/components/ortho/study-mode"
-import { StudyNav } from "@/components/ortho/study-nav"
 
 export type Mode = "work" | "study"
 type View = "home" | "detail"
@@ -93,58 +90,11 @@ export function OrthoApp() {
       </header>
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-5">
-        {/* 移动端：左栏内容折叠为横向条 */}
-        <div className="mb-4 lg:hidden">
-          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            {mode === "work" ? "工作流程" : "学习板块"}
-          </p>
-          {mode === "work" ? (
-            <WorkflowRail steps={stepTitles} current={step} onSelect={setStep} orientation="horizontal" />
-          ) : (
-            <StudyNav hasClassification={data.hasClassification} orientation="horizontal" />
-          )}
-        </div>
-
-        <div
-          className={cn(
-            "grid grid-cols-1 gap-6",
-            mode === "work"
-              ? "lg:grid-cols-[220px_minmax(0,1fr)_300px]"
-              : "lg:grid-cols-[220px_minmax(0,1fr)]",
-          )}
-        >
-          {/* 左栏：工作流程 / 学习板块（桌面端） */}
-          <aside className="hidden lg:block">
-            <div className="sticky top-44 rounded-2xl border border-border bg-card p-4">
-              <p className="mb-4 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                {mode === "work" ? "工作流程" : "学习板块"}
-              </p>
-              {mode === "work" ? (
-                <WorkflowRail steps={stepTitles} current={step} onSelect={setStep} />
-              ) : (
-                <StudyNav hasClassification={data.hasClassification} />
-              )}
-            </div>
-          </aside>
-
-          {/* 中栏：主内容 */}
-          <section className="min-w-0">
-            {mode === "work" ? (
-              <WorkMode step={currentStep} index={step} total={data.workflowSteps.length} />
-            ) : (
-              <StudyMode data={data} />
-            )}
-          </section>
-
-          {/* 右栏：快速操作（仅工作模式） */}
-          {mode === "work" && (
-            <aside>
-              <div className="lg:sticky lg:top-44">
-                <WorkQuickActions actions={data.quickActions} />
-              </div>
-            </aside>
-          )}
-        </div>
+        {mode === "work" ? (
+          <WorkMode disease={data as any} currentStep={step} setCurrentStep={setStep} />
+        ) : (
+          <StudyMode disease={data as any} />
+        )}
       </main>
 
       <footer className="border-t border-border bg-muted/30">

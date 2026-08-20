@@ -4,41 +4,12 @@ import { supabase } from "@/lib/supabase";
 import FeedbackHub from "@/components/feedback/FeedbackHub";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import WorkMode from "@/components/disease/WorkMode";
-import StudyMode from "@/components/disease/StudyMode";
-import ThemeToggle from "@/components/ThemeToggle";
-import type { CSSProperties } from "react";
-import type { DiseaseData, DiseaseMode, OrthoTheme } from "@/types/orthoflow";
+import WorkMode from "@/components/ortho/work-mode";
+import StudyMode from "@/components/ortho/study-mode";
+import { ThemeToggle } from "@/components/theme-toggle";
+import type { DiseaseData, DiseaseMode } from "@/types/orthoflow";
 import { isSearchAnalyticsOptedOut, logSearchClick } from "@/lib/searchAnalytics";
 
-
-const DAY_THEME = {
-  "--of-bg": "#F3F7F6",
-  "--of-surface": "rgba(255,255,255,0.90)",
-  "--of-surface-muted": "#F2F7F5",
-  "--of-text": "#172A2E",
-  "--of-text-strong": "#20383C",
-  "--of-muted": "#667C80",
-  "--of-border": "#D8E5E2",
-  "--of-accent": "#15798A",
-  "--of-accent-soft": "#EAF7F8",
-  "--of-accent-border": "#C3E4E7",
-  "--of-shadow": "rgba(39,76,79,.08)",
-};
-
-const NIGHT_THEME = {
-  "--of-bg": "#10191B",
-  "--of-surface": "rgba(23,37,40,0.94)",
-  "--of-surface-muted": "#1B2A2D",
-  "--of-text": "#E4EFEE",
-  "--of-text-strong": "#F3F8F7",
-  "--of-muted": "#A8BCBE",
-  "--of-border": "#33484B",
-  "--of-accent": "#62C9D5",
-  "--of-accent-soft": "#18363B",
-  "--of-accent-border": "#315A60",
-  "--of-shadow": "rgba(0,0,0,.28)",
-};
 
 export default function Home() {
   const [diseaseList, setDiseaseList] = useState<DiseaseData[]>([]);
@@ -47,30 +18,8 @@ export default function Home() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedDisease, setSelectedDisease] = useState<DiseaseData | null>(null);
   const [mode, setMode] = useState<DiseaseMode>("work");
-  const [theme, setTheme] = useState<OrthoTheme>("day");
   const [currentStep, setCurrentStep] = useState(0);
   const homeBackgroundRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const saved = window.localStorage.getItem("orthoflow-theme");
-    if (saved === "day" || saved === "night") {
-      setTheme(saved);
-      return;
-    }
-    if (window.matchMedia?.("(prefers-color-scheme: dark)").matches) {
-      setTheme("night");
-    }
-  }, []);
-
-  const toggleTheme = () => {
-    setTheme((current) => {
-      const next = current === "day" ? "night" : "day";
-      window.localStorage.setItem("orthoflow-theme", next);
-      return next;
-    });
-  };
-
-  const themeVars = (theme === "night" ? NIGHT_THEME : DAY_THEME) as CSSProperties;
 
   useEffect(() => {
     async function loadDiseases() {
@@ -190,7 +139,7 @@ export default function Home() {
 
   if (selectedDisease) {
     return (
-      <div style={themeVars} data-theme={theme} className="relative min-h-screen overflow-x-hidden bg-[var(--of-bg)] text-[var(--of-text)] transition-colors duration-300">
+      <div className="relative min-h-screen overflow-x-hidden bg-[var(--of-bg)] text-[var(--of-text)] transition-colors duration-300">
         <div className="pointer-events-none fixed inset-0 overflow-hidden">
           <div
             className="absolute inset-0 opacity-[0.14]"
@@ -233,7 +182,7 @@ export default function Home() {
             </div>
 
             <div className="flex items-center gap-2">
-              <ThemeToggle theme={theme} onToggle={toggleTheme} />
+              <ThemeToggle />
               <div className="flex w-full gap-2 rounded-2xl border border-[var(--of-border)] bg-[var(--of-surface-muted)] p-1.5 shadow-inner shadow-[#AFC6C2]/25 lg:w-auto">
               <button
                 onClick={() => setMode("work")}
@@ -327,8 +276,6 @@ export default function Home() {
         event.currentTarget.style.setProperty("--mouse-x", `${x}%`);
         event.currentTarget.style.setProperty("--mouse-y", `${y}%`);
       }}
-      style={themeVars}
-      data-theme={theme}
       className="relative min-h-screen overflow-hidden bg-[var(--of-bg)] text-[var(--of-text)] transition-colors duration-300"
     >
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
@@ -385,7 +332,7 @@ export default function Home() {
         </div>
 
         <div className="flex items-center gap-2">
-          <ThemeToggle theme={theme} onToggle={toggleTheme} />
+          <ThemeToggle />
           <div className="hidden items-center gap-2 rounded-full border border-[var(--of-border)] bg-[var(--of-surface)] px-4 py-2 text-xs text-[var(--of-muted)] backdrop-blur-xl sm:flex">
           <span className="relative flex h-2 w-2">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-300 opacity-70" />

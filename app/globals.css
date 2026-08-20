@@ -1,23 +1,90 @@
 @import "tailwindcss";
 
-@theme {
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme inline {
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
 }
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f3f7f6;
+  --foreground: #172a2e;
+  --card: #ffffff;
+  --card-foreground: #20383c;
+  --popover: #ffffff;
+  --popover-foreground: #20383c;
+  --primary: #168fa3;
+  --primary-foreground: #ffffff;
+  --muted: #eef4f2;
+  --muted-foreground: #667c80;
+  --accent: #eaf7f8;
+  --accent-foreground: #176f7b;
+  --border: #d8e5e2;
+  --ring: #20a6b9;
+
+  --of-bg: #f3f7f6;
+  --of-surface: rgba(255, 255, 255, 0.9);
+  --of-surface-muted: #f2f7f5;
+  --of-text: #172a2e;
+  --of-text-strong: #20383c;
+  --of-muted: #667c80;
+  --of-border: #d8e5e2;
+  --of-accent: #15798a;
+  --of-accent-soft: #eaf7f8;
+  --of-accent-border: #c3e4e7;
+  --of-shadow: rgba(39, 76, 79, 0.08);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+.dark {
+  --background: #11191b;
+  --foreground: #e4efee;
+  --card: #172326;
+  --card-foreground: #f3f8f7;
+  --popover: #172326;
+  --popover-foreground: #f3f8f7;
+  --primary: #5cc3cf;
+  --primary-foreground: #0d1719;
+  --muted: #1b2a2d;
+  --muted-foreground: #a8bcbe;
+  --accent: #18363b;
+  --accent-foreground: #9fe4eb;
+  --border: #33484b;
+  --ring: #62c9d5;
+
+  --of-bg: #10191b;
+  --of-surface: rgba(23, 37, 40, 0.94);
+  --of-surface-muted: #1b2a2d;
+  --of-text: #e4efee;
+  --of-text-strong: #f3f8f7;
+  --of-muted: #a8bcbe;
+  --of-border: #33484b;
+  --of-accent: #62c9d5;
+  --of-accent-soft: #18363b;
+  --of-accent-border: #315a60;
+  --of-shadow: rgba(0, 0, 0, 0.28);
+}
+
+html {
+  background: var(--background);
 }
 
 body {
+  margin: 0;
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
