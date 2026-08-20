@@ -1,19 +1,26 @@
-"use client"
+"use client";
 
-import { Moon, Sun } from "lucide-react"
-import { useTheme } from "@/components/theme-provider"
+import type { OrthoTheme } from "@/types/orthoflow";
 
-export function ThemeToggle() {
-  const { theme, toggleTheme } = useTheme()
+export default function ThemeToggle({
+  theme,
+  onToggle,
+}: {
+  theme: OrthoTheme;
+  onToggle: () => void;
+}) {
+  const isNight = theme === "night";
 
   return (
     <button
       type="button"
-      onClick={toggleTheme}
-      aria-label={theme === "dark" ? "切换到日间模式" : "切换到夜间模式"}
-      className="inline-flex size-10 items-center justify-center rounded-full border border-border bg-card text-foreground shadow-sm transition-colors hover:bg-muted"
+      onClick={onToggle}
+      aria-label={isNight ? "切换到白天模式" : "切换到夜间模式"}
+      title={isNight ? "切换到白天模式" : "切换到夜间模式"}
+      className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl border border-[var(--of-border)] bg-[var(--of-surface)] px-3 text-sm font-medium text-[var(--of-muted)] shadow-sm backdrop-blur-xl transition hover:-translate-y-0.5 hover:text-[var(--of-text-strong)]"
     >
-      {theme === "dark" ? <Sun className="size-5" /> : <Moon className="size-5" />}
+      <span aria-hidden="true" className="text-base">{isNight ? "☀" : "☾"}</span>
+      <span className="hidden sm:inline">{isNight ? "白天" : "夜间"}</span>
     </button>
-  )
+  );
 }
