@@ -1,316 +1,406 @@
 "use client";
 
-import { supabase } from "@/lib/supabase";
-import type {
-  DiseaseData,
-  EvidenceClaim,
-  ProcedureData,
-  ProcedureFailureMode,
-  ProcedureRef,
-} from "@/types/orthoflow";
-import { useEffect, useMemo, useState } from "react";
+import React, { useState } from "react";
+import { DiseaseData, ProcedureData } from "@/types/orthoflow";
 
-function statusLabel(status?: ProcedureRef["status"]) {
-  if (status === "published") return "已发布";
-  if (status === "updating") return "更新中";
-  return "Gold Example";
+interface ProcedureModeProps {
+  disease: DiseaseData;
+  procedureData?: ProcedureData | null;
 }
 
-function reviewLabel(status?: ProcedureData["reviewStatus"]) {
-  if (status === "human_reviewed") return "人工复核";
-  if (status === "evidence_checked") return "证据已核验";
-  return "草稿";
-}
-
-function BulletCard({
-  title,
-  items,
-  tone = "neutral",
-}: {
-  title: string;
-  items?: string[];
-  tone?: "neutral" | "action" | "warning" | "danger";
-}) {
-  if (!items?.length) return null;
-
-  const toneClass =
-    tone === "action"
-      ? "border-[var(--of-accent-border)] bg-[var(--of-accent-soft)]"
-      : tone === "warning"
-        ? "border-[var(--of-warning-border)] bg-[var(--of-warning-bg)]"
-        : tone === "danger"
-          ? "border-[var(--of-danger-border)] bg-[var(--of-danger-bg)]"
-          : "border-[var(--of-border)] bg-[var(--of-surface)]";
-
-  return (
-    <article className={`rounded-2xl border p-5 ${toneClass}`}>
-      <h4 className="font-semibold text-[var(--of-text-strong)]">{title}</h4>
-      <ul className="mt-3 space-y-2.5">
-        {items.map((item, index) => (
-          <li key={`${title}-${index}`} className="flex items-start gap-2.5 text-sm leading-6 text-[var(--of-muted)]">
-            <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--of-accent)]" />
-            <span>{item}</span>
-          </li>
-        ))}
-      </ul>
-    </article>
-  );
-}
-
-function SectionTitle({ number, title, subtitle }: { number: string; title: string; subtitle?: string }) {
-  return (
-    <div className="mb-4 flex items-start gap-3">
-      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-[#20A6B9] to-[#4B8EE8] text-sm font-bold text-white">
-        {number}
-      </span>
-      <div>
-        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--of-accent)]/75">Procedure Module</div>
-        <h3 className="mt-0.5 text-lg font-semibold text-[var(--of-text-strong)]">{title}</h3>
-        {subtitle && <p className="mt-1 text-sm leading-6 text-[var(--of-muted)]">{subtitle}</p>}
-      </div>
-    </div>
-  );
-}
-
-function FailureModeCard({ item, index }: { item: ProcedureFailureMode; index: number }) {
-  return (
-    <article className="rounded-2xl border border-[var(--of-border)] bg-[var(--of-surface)] p-5">
-      <div className="flex items-start gap-3">
-        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl border border-[var(--of-danger-border)] bg-[var(--of-danger-bg)] text-xs font-semibold text-[var(--of-danger-text)]">
-          {index + 1}
-        </span>
-        <div className="min-w-0">
-          <h4 className="font-semibold text-[var(--of-text-strong)]">{item.problem}</h4>
-          {item.whyItHappens && <p className="mt-2 text-sm leading-6 text-[var(--of-muted)]"><span className="font-semibold text-[var(--of-text-strong)]">为什么会发生：</span>{item.whyItHappens}</p>}
-          {item.prevention && <p className="mt-2 text-sm leading-6 text-[var(--of-muted)]"><span className="font-semibold text-[var(--of-text-strong)]">预防：</span>{item.prevention}</p>}
-          {item.bailout && <p className="mt-2 rounded-xl border border-[var(--of-warning-border)] bg-[var(--of-warning-bg)] px-3 py-2 text-sm leading-6 text-[var(--of-warning-text)]"><span className="font-semibold">Bailout：</span>{item.bailout}</p>}
-        </div>
-      </div>
-    </article>
-  );
-}
-
-function EvidenceCard({ claim }: { claim: EvidenceClaim }) {
-  const status = claim.evidenceVerified === "true" ? "已核验" : claim.evidenceVerified === "partial" ? "部分核验" : "待核验";
-  return (
-    <article className="rounded-2xl border border-[var(--of-border)] bg-[var(--of-surface)] p-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="rounded-full border border-[var(--of-accent-border)] bg-[var(--of-accent-soft)] px-2 py-1 text-[10px] font-semibold text-[var(--of-accent)]">{status}</span>
-        {claim.sourceType && <span className="text-[10px] uppercase tracking-[0.14em] text-[var(--of-muted)]">{claim.sourceType}</span>}
-      </div>
-      <p className="mt-2 text-sm font-medium leading-6 text-[var(--of-text-strong)]">{claim.finalWording || claim.claim}</p>
-      {claim.contextLimit && <p className="mt-2 text-xs leading-5 text-[var(--of-muted)]">适用边界：{claim.contextLimit}</p>}
-      {claim.sourceTitle && (
-        <p className="mt-2 text-xs leading-5 text-[var(--of-muted)]">
-          来源：{claim.sourceUrl ? <a className="text-[var(--of-accent)] underline underline-offset-2" href={claim.sourceUrl} target="_blank" rel="noreferrer">{claim.sourceTitle}</a> : claim.sourceTitle}
-          {claim.sourceIdentifier ? ` · ${claim.sourceIdentifier}` : ""}
-        </p>
-      )}
-    </article>
-  );
-}
-
-export default function ProcedureMode({ disease }: { disease: DiseaseData }) {
-  const procedures = useMemo(
-    () => (Array.isArray(disease.procedureRefs) ? disease.procedureRefs : []),
-    [disease.procedureRefs]
-  );
-  const [selectedId, setSelectedId] = useState(procedures[0]?.id || "");
-  const [procedureData, setProcedureData] = useState<ProcedureData | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [loadError, setLoadError] = useState("");
-
-  useEffect(() => {
-    setSelectedId(procedures[0]?.id || "");
-  }, [disease.id, procedures]);
-
-  const selected = procedures.find((item) => item.id === selectedId) || procedures[0];
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadProcedure() {
-      if (!selected?.id) {
-        setProcedureData(null);
-        return;
-      }
-
-      setLoading(true);
-      setLoadError("");
-      const { data, error } = await supabase
-        .from("procedures")
-        .select("data")
-        .eq("id", selected.id)
-        .maybeSingle();
-
-      if (cancelled) return;
-
-      if (error) {
-        setProcedureData(null);
-        setLoadError(error.message || "手术内容加载失败");
-      } else {
-        setProcedureData((data?.data || null) as ProcedureData | null);
-      }
-      setLoading(false);
+// 默认内置的胫骨平台 ORIF 示例数据（若数据库未单独配置则优雅降级展示）
+const DEFAULT_PLATEAU_ORIF: ProcedureData = {
+  id: "tibial_plateau_orif",
+  title: "胫骨平台切开复位内固定术 (ORIF)",
+  englishTitle: "Open Reduction and Internal Fixation of Tibial Plateau Fracture",
+  targetDiseaseId: "tibial_plateau",
+  summary:
+    "以恢复下肢机械轴线与关节面平整为核心。根据骨折涉及柱（外侧/内侧/后柱）决定入路，塌陷区顶起植骨支撑，坚强固定骨块并允许早期不负重关节活动。",
+  quickPrep: {
+    position: "仰卧位，患肢常规垫高约 15°，大腿近端可使用止血带；对侧下肢平放或略下垂方便 C 臂透视。",
+    cArm: "C 臂从对侧进入，球管垂直于膝关节。术中需快速切换标准膝关节正位（尾倾 10°-15° 切线位）与侧位。",
+    draping: "消毒范围自大腿中上段至足趾，下肢保持完全可活动状态，便于术中屈伸膝关节与轴向牵引。",
+    instruments: [
+      { name: "骨撬 / 顶棒", purpose: "自干骺端开窗，从下向上均匀顶起塌陷的关节面骨块。" },
+      { name: "2.0mm 克氏针", purpose: "复位骨块后的临时交叉固定，以及软骨下“排钉 (Rafting)”临时定位。" },
+      { name: "大复位钳 / 尖嘴钳", purpose: "夹持外侧/内侧骨块纠正髁增宽，恢复平台内外侧宽度。" },
+      { name: "胫骨近端解剖锁定钢板", purpose: "外侧解剖型支撑/锁定钢板，或内侧/后内侧 3.5mm 支撑钢板。" },
+      { name: "同种异体骨 / 人工骨", purpose: "关节面复位顶起后充填干骺端松质骨缺损区，防止再塌陷。" }
+    ]
+  },
+  approaches: [
+    {
+      id: "anterolateral",
+      name: "前外侧入路 (Anterolateral Approach)",
+      indications: "适用于 Schatzker I、II、III 型及累及外侧柱的单纯劈裂或塌陷骨折。",
+      landmarks: "胫骨前肌外侧缘、Gerdy 结节、腓骨头前缘。",
+      incision: "自 Gerdy 结节近端 2-3cm 沿胫骨外侧缘弧形向远端延伸，长约 8-12cm。",
+      layers: "切开皮肤皮下 → 沿走行切开髂胫束 → 钝性剥离外侧副韧带前缘下方 → 横行切开冠状韧带显露外侧半月板下缘并悬吊保护 → 暴露外侧平台关节线与骨折窗。",
+      dangerStructures: [
+        { name: "外侧半月板前角及体部", detail: "切开冠状韧带时贴近平台边缘切，勿横断半月板体部；复位完毕后严密缝合。" },
+        { name: "腓总神经", detail: "走行于腓骨颈外后方，向远端暴露或骨膜剥离时禁止越过外侧后缘。" }
+      ]
+    },
+    {
+      id: "posteromedial",
+      name: "后内侧入路 (Posteromedial Approach)",
+      indications: "适用于 Schatzker IV 型内侧平台骨折，或累及后内侧冠状位剪切剪断骨块（三柱分型后内柱受累）。",
+      landmarks: "鹅足肌腱后缘、胫骨内侧皮质后缘、内侧关节线。",
+      incision: "沿内侧副韧带后缘向远端延伸，平内侧平台下方沿胫骨内后嵴切开约 8-10cm。",
+      layers: "切开皮肤皮下 → 向前牵开鹅足肌腱（或将其部分剥离） → 显露并向后牵开内侧腓肠肌与半膜肌间隙 → 骨膜下剥离腘肌附着点暴露后内侧骨块。",
+      dangerStructures: [
+        { name: "隐神经及大隐静脉", detail: "走行于切口前方浅层，切开皮下时注意识别并钝性向前方牵开保护。" },
+        { name: "腘窝血管神经鞘", detail: "走行于内侧深层后方，拉钩放置必须紧贴骨面，严禁盲目向后深部用力拉拽。" }
+      ]
     }
+  ],
+  steps: [
+    {
+      stepNumber: 1,
+      title: "暴露与探查关节",
+      details: "完成切口入路后，切开关节囊及冠状韧带，直视下探查关节腔与外侧半月板。用生理盐水冲洗清除关节内积血与碎骨屑，明确关节面塌陷区域及边缘劈裂骨块。",
+      instrumentsUsed: "吸引器、深部拉钩、半月板拉钩",
+      dangerAlert: "切勿过度牵拉皮瓣边缘，胫前皮肤薄，皮瓣拉钩需轻柔以防切口坏死。"
+    },
+    {
+      stepNumber: 2,
+      title: "干骺端开窗与抬升关节面",
+      details: "在外侧劈裂骨块处打开骨折门，或在干骺端前下方开骨窗。使用平头顶棒由下向上轻柔顶起塌陷骨块，使软骨面恢复平整，以股骨髁作为解剖模板对齐。",
+      instrumentsUsed: "骨撬 / 顶棒、平头敲击器",
+      dangerAlert: "避免尖锐器械单点暴力撬拨，防止穿破关节软骨形成新的软骨碎裂。"
+    },
+    {
+      stepNumber: 3,
+      title: "松质骨植骨充填",
+      details: "关节面顶平后，干骺端遗留明显松质骨空洞缺损。使用同种异体松质骨颗粒或人工骨替代物紧密充填空洞，提供抗轴向负荷的力学支撑。",
+      instrumentsUsed: "植骨漏斗、骨压实棒",
+      dangerAlert: "植骨需填塞实，但避免因过度加压造成刚复位的关节面再度隆起移位。"
+    },
+    {
+      stepNumber: 4,
+      title: "临时固定与软骨下排钉 (Subchondral Rafting)",
+      details: "使用 2.0mm 克氏针由外向内贴近软骨下 5-10mm 平行穿入，临时维持关节面高度；经皮或复位钳夹持外侧劈裂骨块，纠正髁增宽。",
+      instrumentsUsed: "2.0mm 克氏针、大号骨复位钳",
+      dangerAlert: "克氏针禁止穿入关节腔内，术中透视确认针尖位于软骨下骨质中。"
+    },
+    {
+      stepNumber: 5,
+      title: "放置解剖支撑钢板与最终固定",
+      details: "将胫骨近端外侧锁定解剖钢板贴附于骨面，近端置入 3-4 枚软骨下平行锁定螺钉（排钉构型），远端骨干置入双皮质螺钉连接干骺端与骨干。",
+      instrumentsUsed: "锁定钻套、测深尺、锁定/皮质螺钉",
+      dangerAlert: "若合并后内侧骨块，外侧钢板螺钉不能跨过固定后内侧，必须加用后内侧抗滑支撑小钢板。"
+    },
+    {
+      stepNumber: 6,
+      title: "半月板修复与分层缝合",
+      details: "检查外侧半月板，若有周边附着撕裂行全内或由内向外缝合修复；大量生理盐水冲洗，严密缝合冠状韧带、髂胫束与深筋膜，逐层关闭切口并留置引流管。",
+      instrumentsUsed: "半月板缝合针 / PDS 缝线、切口缝线",
+      dangerAlert: "缝合皮下组织张力过大时需皮下减张，胫前切口严禁强行缝合，必要时延期闭合。"
+    }
+  ],
+  intraOpChecks: [
+    {
+      view: "膝关节标准正位透视 (尾倾 10°-15°)",
+      criteria: "内、外侧平台关节面无台阶 (塌陷 < 2mm)，外侧平台无明显向外侧增宽移位，下肢机械力线居中。"
+    },
+    {
+      view: "膝关节标准侧位透视",
+      criteria: "后倾角维持在正常 7°-10° 范围，后柱皮质无移位或反折台阶，螺钉未突入髁间窝或关节腔。"
+    }
+  ],
+  failureAndBailout: [
+    {
+      pitfall: "术后内翻畸形与关节面再塌陷",
+      cause: "漏诊后内侧骨块，仅打了单一外侧钢板；或干骺端植骨不足，排钉未能提供足够下托力。",
+      bailout: "术中如发现后内侧冠状面骨块移位，果断增加后内侧切口并放置 3.5mm T型/重建抗滑钢板。"
+    },
+    {
+      pitfall: "切口边缘坏死与浅深部感染",
+      cause: "在高度水肿、张力性水疱高峰期盲目切开；或内/外侧双切口皮桥过窄 (< 7cm)。",
+      bailout: "术前严格等待皮肤皱褶征；双切口确保足够皮桥宽度；一旦皮缘苍白发黑，早期换药清创，严禁张力缝合。"
+    }
+  ],
+  rehabMilestones: [
+    {
+      phase: "第 1 阶段：消肿与早期活动度 (术后 0-2 周)",
+      goals: "抬高患肢消肿，控制疼痛，踝泵训练防血栓。切口条件允许下启动膝关节无痛被动伸屈 (目标 2 周达 90°)。严格不负重。"
+    },
+    {
+      phase: "第 2 阶段：活动度巩固与肌力唤醒 (术后 2-6 周)",
+      goals: "继续争取完全伸膝与屈曲 > 110°。股四头肌等长收缩及直腿抬高训练。维持完全不负重（双拐辅助转移）。"
+    },
+    {
+      phase: "第 3 阶段：条件性部分负重启动 (术后 6-12 周)",
+      goals: "复查 X 线确认关节面平整无塌陷且骨折线模糊后，在术者指导下由 20%-30% 体重渐进部分负重，严禁未经复查盲目踩地。"
+    },
+    {
+      phase: "第 4 阶段：完全负重与步态恢复 (术后 12 周以上)",
+      goals: "影像确认临床愈合后过渡至完全负重行走，纠正防痛跛行步态，逐步恢复中低强度日常活动。"
+    }
+  ]
+};
 
-    loadProcedure();
-    return () => {
-      cancelled = true;
-    };
-  }, [selected?.id]);
-
-  if (!selected) {
-    return (
-      <section className="rounded-[28px] border border-[var(--of-border)] bg-[var(--of-surface)] p-6 shadow-[0_16px_50px_rgba(39,76,79,.07)]">
-        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--of-accent)]/75">Procedure Pro</div>
-        <h3 className="mt-2 text-xl font-semibold text-[var(--of-text-strong)]">该疾病的手术模块正在建设</h3>
-      </section>
-    );
-  }
+export default function ProcedureMode({ disease, procedureData }: ProcedureModeProps) {
+  const data = procedureData || DEFAULT_PLATEAU_ORIF;
+  const [selectedApproachIndex, setSelectedApproachIndex] = useState(0);
 
   return (
-    <div className="grid grid-cols-1 gap-5 xl:grid-cols-[300px_minmax(0,1fr)]">
-      <aside className="rounded-[24px] border border-[var(--of-border)] bg-[var(--of-surface)] p-4 shadow-[0_16px_50px_rgba(39,76,79,.07)] xl:sticky xl:top-28 xl:self-start">
-        <div className="mb-4">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--of-accent)]/70">Procedure Library</div>
-          <h3 className="mt-1 font-semibold text-[var(--of-text-strong)]">相关手术</h3>
-        </div>
-        <div className="space-y-2">
-          {procedures.map((procedure) => {
-            const active = procedure.id === selected.id;
-            return (
-              <button key={procedure.id} type="button" onClick={() => setSelectedId(procedure.id)} className={`w-full rounded-2xl border px-4 py-3 text-left transition ${active ? "border-[var(--of-accent-border)] bg-[var(--of-accent-soft)]" : "border-[var(--of-border)] bg-[var(--of-surface-muted)] hover:border-[var(--of-accent-border)]"}`}>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="font-semibold text-[var(--of-text-strong)]">{procedure.name}</div>
-                    {procedure.englishName && <div className="mt-1 text-xs text-[var(--of-muted)]">{procedure.englishName}</div>}
-                  </div>
-                  {procedure.pro && <span className="shrink-0 rounded-full border border-[var(--of-accent-border)] bg-[var(--of-surface)] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--of-accent)]">Pro</span>}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </aside>
-
-      <section className="min-w-0 space-y-6">
-        <div className="rounded-[28px] border border-[var(--of-border)] bg-[var(--of-surface)] p-5 shadow-[0_20px_70px_rgba(39,76,79,.08)] sm:p-7">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full border border-[var(--of-accent-border)] bg-[var(--of-accent-soft)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--of-accent)]">Procedure Pro</span>
-                <span className="rounded-full border border-[var(--of-border)] bg-[var(--of-surface-muted)] px-2.5 py-1 text-[10px] font-medium text-[var(--of-muted)]">{statusLabel(selected.status)}</span>
-                {procedureData?.reviewStatus && <span className="rounded-full border border-[var(--of-border)] bg-[var(--of-surface-muted)] px-2.5 py-1 text-[10px] font-medium text-[var(--of-muted)]">{reviewLabel(procedureData.reviewStatus)}</span>}
-              </div>
-              <h3 className="mt-3 text-2xl font-semibold tracking-tight text-[var(--of-text-strong)]">{procedureData?.name || selected.name}</h3>
-              {(procedureData?.englishName || selected.englishName) && <p className="mt-1 text-sm text-[var(--of-muted)]">{procedureData?.englishName || selected.englishName}</p>}
+    <div className="space-y-8 animate-fadeIn">
+      {/* 顶部手术总览 */}
+      <section className="rounded-[28px] border border-[#D8E5E2] bg-white/90 p-6 shadow-[0_16px_50px_rgba(39,76,79,.06)] dark:border-[#22393D] dark:bg-[#132326]/90 backdrop-blur-xl">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-1">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[#C3E4E7] bg-[#EAF7F8] px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-[#15798A] dark:border-[#1E454B] dark:bg-[#163338] dark:text-[#52D3E5]">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#168FA3] dark:bg-[#52D3E5]" />
+              Visual Surgical Protocol · 手术实战
             </div>
-            {procedureData?.evidenceUpdatedAt && <div className="rounded-2xl border border-[var(--of-border)] bg-[var(--of-surface-muted)] px-4 py-3 text-xs text-[var(--of-muted)]">证据更新：{procedureData.evidenceUpdatedAt}</div>}
+            <h2 className="text-2xl font-bold tracking-tight text-[#172A2E] dark:text-[#EAF4F4] sm:text-3xl">
+              {data.title}
+            </h2>
+            <p className="text-xs text-[#7A9094] dark:text-[#88A2A6]">{data.englishTitle}</p>
           </div>
+          <div className="rounded-2xl border border-[#D8E5E2] bg-[#F4F8F7] px-4 py-3 text-sm text-[#4D6569] dark:border-[#264246] dark:bg-[#162A2E] dark:text-[#9FB7BA]">
+            <span className="font-medium text-[#168FA3] dark:text-[#52D3E5]">核心原则：</span>
+            力线优先 ＞ 稳定性 ＞ 关节面台阶平整
+          </div>
+        </div>
+        <p className="mt-4 text-sm leading-relaxed text-[#556D71] dark:text-[#A4BDC0]">{data.summary}</p>
+      </section>
 
-          {loading ? (
-            <p className="mt-5 text-sm text-[var(--of-muted)]">正在加载 Procedure Brain…</p>
-          ) : loadError ? (
-            <div className="mt-5 rounded-2xl border border-[var(--of-danger-border)] bg-[var(--of-danger-bg)] p-4 text-sm text-[var(--of-danger-text)]">手术内容暂未载入：{loadError}</div>
-          ) : (
-            <>
-              <p className="mt-5 max-w-4xl text-sm leading-7 text-[var(--of-muted)]">{procedureData?.summary || selected.summary}</p>
-              {procedureData?.scope && <div className="mt-4 rounded-2xl border border-[var(--of-accent-border)] bg-[var(--of-accent-soft)] p-4 text-sm leading-6 text-[var(--of-muted)]"><span className="font-semibold text-[var(--of-text-strong)]">本页范围：</span>{procedureData.scope}</div>}
-            </>
-          )}
+      {/* 模块 1：术前 10 分钟极速准备 */}
+      <section className="rounded-[28px] border border-[#D8E5E2] bg-white/90 p-6 shadow-sm dark:border-[#22393D] dark:bg-[#132326]/90">
+        <div className="mb-5 flex items-center gap-3">
+          <span className="grid h-8 w-8 place-items-center rounded-xl bg-gradient-to-br from-[#20A6B9] to-[#4B8EE8] text-xs font-bold text-white">
+            01
+          </span>
+          <h3 className="text-lg font-bold text-[#172A2E] dark:text-[#EAF4F4]">术前 10 分钟摆台与准备</h3>
         </div>
 
-        {procedureData && (
-          <>
-            <section>
-              <SectionTitle number="01" title="手术目标与适用边界" subtitle="先确认为什么做、这页适用于谁，不把 ORIF 变成按分型自动选择。" />
-              <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-                <BulletCard title="复位与固定目标" items={procedureData.goals} tone="action" />
-                <BulletCard title="常见进入 ORIF 评估的场景" items={procedureData.indicationScenarios} />
-                <BulletCard title="不适合直接套本页路径" items={procedureData.notSuitableScenarios} tone="warning" />
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div className="rounded-2xl border border-[#D8E5E2] bg-[#F8FBFA] p-4 dark:border-[#233F43] dark:bg-[#172C30]">
+            <div className="flex items-center gap-2 font-semibold text-[#168FA3] dark:text-[#52D3E5]">
+              <span>🛏️ 患者体位</span>
+            </div>
+            <p className="mt-2 text-xs leading-relaxed text-[#5B7377] dark:text-[#9AB4B7]">{data.quickPrep.position}</p>
+          </div>
+          <div className="rounded-2xl border border-[#D8E5E2] bg-[#F8FBFA] p-4 dark:border-[#233F43] dark:bg-[#172C30]">
+            <div className="flex items-center gap-2 font-semibold text-[#168FA3] dark:text-[#52D3E5]">
+              <span>📡 C 臂与透视位</span>
+            </div>
+            <p className="mt-2 text-xs leading-relaxed text-[#5B7377] dark:text-[#9AB4B7]">{data.quickPrep.cArm}</p>
+          </div>
+          <div className="rounded-2xl border border-[#D8E5E2] bg-[#F8FBFA] p-4 dark:border-[#233F43] dark:bg-[#172C30]">
+            <div className="flex items-center gap-2 font-semibold text-[#168FA3] dark:text-[#52D3E5]">
+              <span>🧼 消毒铺单范围</span>
+            </div>
+            <p className="mt-2 text-xs leading-relaxed text-[#5B7377] dark:text-[#9AB4B7]">{data.quickPrep.draping}</p>
+          </div>
+        </div>
+
+        {/* 器械耗材清单 */}
+        <div className="mt-5 border-t border-[#E2ECE9] pt-4 dark:border-[#1E373B]">
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-[#738B8E] dark:text-[#8AA4A7]">
+            重点器械与植入物耗材 (What & Why)
+          </h4>
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {data.quickPrep.instruments.map((inst, idx) => (
+              <div
+                key={idx}
+                className="flex flex-col justify-between rounded-xl border border-[#DDE7E5] bg-white p-3 shadow-sm dark:border-[#26454A] dark:bg-[#14282C]"
+              >
+                <div className="text-sm font-semibold text-[#1D3539] dark:text-[#E2EEEE]">{inst.name}</div>
+                <div className="mt-1 text-xs text-[#637D81] dark:text-[#95AFB2]">{inst.purpose}</div>
               </div>
-            </section>
+            ))}
+          </div>
+        </div>
+      </section>
 
-            <section>
-              <SectionTitle number="02" title="术前看片：先把骨折变成手术地图" subtitle="Schatzker 只是描述之一；真正决定入路和固定的是 CT 形态、柱/象限、力线与软组织。" />
-              <BulletCard title="术前必须确认" items={procedureData.preopImaging} />
-            </section>
+      {/* 模块 2：入路选择与解剖层次 */}
+      <section className="rounded-[28px] border border-[#D8E5E2] bg-white/90 p-6 shadow-sm dark:border-[#22393D] dark:bg-[#132326]/90">
+        <div className="mb-5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="grid h-8 w-8 place-items-center rounded-xl bg-gradient-to-br from-[#20A6B9] to-[#4B8EE8] text-xs font-bold text-white">
+              02
+            </span>
+            <h3 className="text-lg font-bold text-[#172A2E] dark:text-[#EAF4F4]">手术入路与危险解剖</h3>
+          </div>
+          {/* 入路切换 Tab */}
+          <div className="flex rounded-xl border border-[#D8E5E2] bg-[#F2F7F5] p-1 dark:border-[#243F43] dark:bg-[#172D31]">
+            {data.approaches.map((app, idx) => (
+              <button
+                key={app.id}
+                onClick={() => setSelectedApproachIndex(idx)}
+                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                  selectedApproachIndex === idx
+                    ? "bg-[#15798A] text-white shadow-sm dark:bg-[#20A6B9]"
+                    : "text-[#5B7377] hover:text-[#172A2E] dark:text-[#8AA4A7] dark:hover:text-white"
+                }`}
+              >
+                {app.name.split(" ")[0]}
+              </button>
+            ))}
+          </div>
+        </div>
 
-            <section>
-              <SectionTitle number="03" title="术前 10 分钟准备" subtitle="体位、透视通道和备用器械在切皮前先想清楚。" />
-              <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-                <BulletCard title="体位与摆台" items={procedureData.positioning} />
-                <BulletCard title="C 臂 / 透视" items={procedureData.cArm} />
-                <BulletCard title="器械与内植物" items={procedureData.instruments} />
+        {/* 当前选中入路详情 */}
+        {data.approaches[selectedApproachIndex] && (
+          <div className="space-y-4 rounded-2xl border border-[#D0E2E0] bg-[#F8FBFA] p-5 dark:border-[#244246] dark:bg-[#162C30]">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <h4 className="text-base font-bold text-[#19383C] dark:text-[#E8F3F4]">
+                {data.approaches[selectedApproachIndex].name}
+              </h4>
+              <span className="text-xs text-[#6F888B] dark:text-[#8EA8AB]">
+                适应指征：{data.approaches[selectedApproachIndex].indications}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <div className="rounded-xl border border-[#DDE7E5] bg-white p-3 text-xs leading-relaxed dark:border-[#28494E] dark:bg-[#14282C]">
+                <span className="font-semibold text-[#168FA3] dark:text-[#52D3E5]">📍 表面解剖标志：</span>
+                <p className="mt-1 text-[#546E72] dark:text-[#9BB5B8]">
+                  {data.approaches[selectedApproachIndex].landmarks}
+                </p>
               </div>
-            </section>
-
-            <section>
-              <SectionTitle number="04" title="Approach 选择" subtitle="入路由骨块位置和需要直视/支撑的方向决定；下一版会把每个入路拆成独立 Approach Atlas。" />
-              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                {(procedureData.approachRefs || []).map((approach) => (
-                  <article key={approach.id} className="rounded-2xl border border-[var(--of-border)] bg-[var(--of-surface)] p-5">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h4 className="font-semibold text-[var(--of-text-strong)]">{approach.name}</h4>
-                      {approach.englishName && <span className="text-xs text-[var(--of-muted)]">{approach.englishName}</span>}
-                    </div>
-                    {approach.when && <p className="mt-3 text-sm leading-6 text-[var(--of-muted)]"><span className="font-semibold text-[var(--of-text-strong)]">什么时候考虑：</span>{approach.when}</p>}
-                    {approach.why && <p className="mt-2 text-sm leading-6 text-[var(--of-muted)]"><span className="font-semibold text-[var(--of-text-strong)]">为什么：</span>{approach.why}</p>}
-                    {approach.stopPoint && <p className="mt-3 rounded-xl border border-[var(--of-danger-border)] bg-[var(--of-danger-bg)] px-3 py-2 text-sm leading-6 text-[var(--of-danger-text)]"><span className="font-semibold">停止点：</span>{approach.stopPoint}</p>}
-                  </article>
-                ))}
+              <div className="rounded-xl border border-[#DDE7E5] bg-white p-3 text-xs leading-relaxed dark:border-[#28494E] dark:bg-[#14282C]">
+                <span className="font-semibold text-[#168FA3] dark:text-[#52D3E5]">✂️ 切口设计与走行：</span>
+                <p className="mt-1 text-[#546E72] dark:text-[#9BB5B8]">
+                  {data.approaches[selectedApproachIndex].incision}
+                </p>
               </div>
-              <div className="mt-4"><BulletCard title="Danger structures / 高风险结构" items={procedureData.dangerStructures} tone="danger" /></div>
-            </section>
+            </div>
 
-            <section>
-              <SectionTitle number="05" title="Reduction sequence" subtitle="这里给的是常见复杂骨折的心智顺序，不是任何胫骨平台都机械照做。" />
-              <div className="space-y-3">
-                {(procedureData.reductionSequence || []).map((item, index) => (
-                  <div key={index} className="flex items-start gap-4 rounded-2xl border border-[var(--of-border)] bg-[var(--of-surface)] p-4">
-                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl border border-[var(--of-accent-border)] bg-[var(--of-accent-soft)] text-xs font-semibold text-[var(--of-accent)]">{index + 1}</span>
-                    <p className="pt-0.5 text-sm leading-6 text-[var(--of-muted)]">{item}</p>
+            <div className="rounded-xl border border-[#DDE7E5] bg-white p-3 text-xs leading-relaxed dark:border-[#28494E] dark:bg-[#14282C]">
+              <span className="font-semibold text-[#168FA3] dark:text-[#52D3E5]">🔍 逐层显露过程 (Layers)：</span>
+              <p className="mt-1 text-[#546E72] dark:text-[#9BB5B8]">{data.approaches[selectedApproachIndex].layers}</p>
+            </div>
+
+            {/* 标红危险结构 */}
+            <div className="rounded-xl border border-[#F3C8C8] bg-[#FFF5F5] p-3 text-xs dark:border-[#4D2424] dark:bg-[#2A1515]">
+              <div className="flex items-center gap-1.5 font-bold text-[#A82828] dark:text-[#F37B7B]">
+                <span>⚠️ 必须保护的高危结构 (Danger Structures)</span>
+              </div>
+              <div className="mt-2 space-y-1.5">
+                {data.approaches[selectedApproachIndex].dangerStructures.map((danger, dIdx) => (
+                  <div key={dIdx} className="text-[#842A2A] dark:text-[#EFA0A0]">
+                    <span className="font-semibold">• {danger.name}：</span>
+                    {danger.detail}
                   </div>
                 ))}
               </div>
-              <div className="mt-4"><BulletCard title="固定策略" items={procedureData.fixationStrategy} /></div>
-            </section>
-
-            <section>
-              <SectionTitle number="06" title="Intra-op checks" subtitle="做完不是看钢板漂亮，而是确认关节面、力线、螺钉与稳定性。" />
-              <BulletCard title="结束前逐项检查" items={procedureData.intraopChecks} tone="action" />
-            </section>
-
-            <section>
-              <SectionTitle number="07" title="Failure modes & bailout" subtitle="把最常见的失败原因提前写进术前计划。" />
-              <div className="space-y-3">
-                {(procedureData.failureModes || []).map((item, index) => <FailureModeCard key={index} item={item} index={index} />)}
-              </div>
-            </section>
-
-            <section>
-              <SectionTitle number="08" title="术后轨道" subtitle="按固定稳定性、软组织、影像与功能里程碑推进，不用统一周数自动升级。" />
-              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                <BulletCard title="监测" items={procedureData.postopFramework?.monitoring} />
-                <BulletCard title="ROM / 功能" items={procedureData.postopFramework?.rom} />
-                <BulletCard title="负重" items={procedureData.postopFramework?.weightBearing} tone="warning" />
-                <BulletCard title="随访" items={procedureData.postopFramework?.followUp} />
-              </div>
-            </section>
-
-            <section>
-              <SectionTitle number="09" title="Evidence layer" subtitle="精确时机、固定顺序和负重策略必须保留适用边界。" />
-              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-                {(procedureData.evidenceClaims || []).map((claim) => <EvidenceCard key={claim.id} claim={claim} />)}
-              </div>
-              {procedureData.localPracticeNote && <div className="mt-4 rounded-2xl border border-[var(--of-warning-border)] bg-[var(--of-warning-bg)] p-4 text-sm leading-6 text-[var(--of-warning-text)]"><span className="font-semibold">本院实践层：</span>{procedureData.localPracticeNote}</div>}
-            </section>
-          </>
+            </div>
+          </div>
         )}
+      </section>
 
-        <div className="rounded-2xl border border-[var(--of-danger-border)] bg-[var(--of-danger-bg)] p-4 text-sm leading-6 text-[var(--of-danger-text)]">
-          手术与入路内容用于术前学习、讨论与复盘，不替代成熟术者现场指导。复杂骨折如解剖不清、血管神经风险、软组织条件不允许或固定策略超出当前能力，应停止推进并升级给有经验术者。
+      {/* 模块 3：核心手术步骤序列 (Step-by-step) */}
+      <section className="rounded-[28px] border border-[#D8E5E2] bg-white/90 p-6 shadow-sm dark:border-[#22393D] dark:bg-[#132326]/90">
+        <div className="mb-5 flex items-center gap-3">
+          <span className="grid h-8 w-8 place-items-center rounded-xl bg-gradient-to-br from-[#20A6B9] to-[#4B8EE8] text-xs font-bold text-white">
+            03
+          </span>
+          <h3 className="text-lg font-bold text-[#172A2E] dark:text-[#EAF4F4]">手术核心操作步骤流</h3>
+        </div>
+
+        <div className="space-y-4">
+          {data.steps.map((step) => (
+            <div
+              key={step.stepNumber}
+              className="group rounded-2xl border border-[#D9E6E3] bg-[#FAFDFD] p-4 transition hover:border-[#96D2D9] dark:border-[#244044] dark:bg-[#152B2F] dark:hover:border-[#387B84]"
+            >
+              <div className="flex items-start gap-3.5">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#15798A] text-xs font-bold text-white shadow-sm dark:bg-[#20A6B9]">
+                  {step.stepNumber}
+                </span>
+                <div className="min-w-0 flex-1 space-y-2">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                    <h4 className="text-sm font-bold text-[#1A373B] dark:text-[#E5F1F2]">{step.title}</h4>
+                    {step.instrumentsUsed && (
+                      <span className="text-[11px] font-medium text-[#168FA3] dark:text-[#52D3E5]">
+                        🛠️ {step.instrumentsUsed}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs leading-relaxed text-[#556F73] dark:text-[#9BB4B7]">{step.details}</p>
+                  {step.dangerAlert && (
+                    <div className="rounded-lg border border-[#F1D6A7] bg-[#FFFBF3] px-3 py-1.5 text-[11px] text-[#8C6013] dark:border-[#4B3B1B] dark:bg-[#2A2312] dark:text-[#DFB971]">
+                      <span className="font-semibold">⚠️ 踩坑提醒：</span>
+                      {step.dangerAlert}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* 模块 4：术中透视检查与失误挽救 (Bailout) */}
+      <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {/* 术中透视 */}
+        <div className="rounded-[28px] border border-[#D8E5E2] bg-white/90 p-6 shadow-sm dark:border-[#22393D] dark:bg-[#132326]/90">
+          <div className="mb-4 flex items-center gap-2.5">
+            <span className="grid h-7 w-7 place-items-center rounded-lg bg-[#15798A] text-xs font-bold text-white">
+              04
+            </span>
+            <h3 className="text-base font-bold text-[#172A2E] dark:text-[#EAF4F4]">术中 C 臂透视核对标准</h3>
+          </div>
+          <div className="space-y-3">
+            {data.intraOpChecks.map((check, idx) => (
+              <div
+                key={idx}
+                className="rounded-xl border border-[#D9E6E4] bg-[#F8FBFA] p-3.5 text-xs dark:border-[#233F43] dark:bg-[#172C30]"
+              >
+                <div className="font-bold text-[#168FA3] dark:text-[#52D3E5]">📸 {check.view}</div>
+                <div className="mt-1 text-[#577275] dark:text-[#9BB4B7]">{check.criteria}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* 常见失败模式与 Bailout */}
+        <div className="rounded-[28px] border border-[#D8E5E2] bg-white/90 p-6 shadow-sm dark:border-[#22393D] dark:bg-[#132326]/90">
+          <div className="mb-4 flex items-center gap-2.5">
+            <span className="grid h-7 w-7 place-items-center rounded-lg bg-[#A82828] text-xs font-bold text-white">
+              05
+            </span>
+            <h3 className="text-base font-bold text-[#172A2E] dark:text-[#EAF4F4]">常见失误与术中挽救 (Bailout)</h3>
+          </div>
+          <div className="space-y-3">
+            {data.failureAndBailout.map((fail, idx) => (
+              <div
+                key={idx}
+                className="rounded-xl border border-[#F2D1D1] bg-[#FFF8F8] p-3.5 text-xs dark:border-[#4B2222] dark:bg-[#281414]"
+              >
+                <div className="font-bold text-[#A82828] dark:text-[#F37B7B]">❌ 经典失误：{fail.pitfall}</div>
+                <div className="mt-1 text-[#6F4343] dark:text-[#C59B9B]">{fail.cause}</div>
+                <div className="mt-1.5 border-t border-[#F7E1E1] pt-1.5 font-medium text-[#1E7348] dark:border-[#3D1E1E] dark:text-[#6BD59C]">
+                  💡 挽救方案：{fail.bailout}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* 模块 5：条件进阶康复轨道 */}
+      <section className="rounded-[28px] border border-[#D8E5E2] bg-white/90 p-6 shadow-sm dark:border-[#22393D] dark:bg-[#132326]/90">
+        <div className="mb-4 flex items-center gap-3">
+          <span className="grid h-8 w-8 place-items-center rounded-xl bg-gradient-to-br from-[#20A6B9] to-[#4B8EE8] text-xs font-bold text-white">
+            06
+          </span>
+          <h3 className="text-lg font-bold text-[#172A2E] dark:text-[#EAF4F4]">术后康复与负重轨道 (条件进阶)</h3>
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {data.rehabMilestones.map((m, idx) => (
+            <div
+              key={idx}
+              className="flex flex-col justify-between rounded-xl border border-[#DDE7E5] bg-[#FAFDFD] p-3.5 text-xs dark:border-[#264449] dark:bg-[#152B2F]"
+            >
+              <div className="font-semibold text-[#168FA3] dark:text-[#52D3E5]">{m.phase}</div>
+              <div className="mt-2 text-[#567074] dark:text-[#9BB4B7]">{m.goals}</div>
+            </div>
+          ))}
         </div>
       </section>
     </div>
