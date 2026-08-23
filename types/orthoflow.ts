@@ -58,6 +58,48 @@ export type ApproachRef = {
   stopPoint?: string;
 };
 
+export type ProcedureApproachGuide = {
+  id: string;
+  name: string;
+  englishName?: string;
+  bestFor?: string[];
+  exposes?: string[];
+  anatomyLayers?: string[];
+  dangerStructures?: string[];
+  limitations?: string[];
+  keyPoint?: string;
+  humanReviewRequired?: boolean;
+};
+
+export type ProcedureSurgicalStep = {
+  id: string;
+  title: string;
+  goal?: string;
+  actions?: string[];
+  instruments?: string[];
+  watchFor?: string[];
+  checkpoint?: string[];
+};
+
+export type ProcedureInstrumentItem = {
+  name: string;
+  role?: string;
+  when?: string;
+  commonMistake?: string;
+};
+
+export type ProcedureInstrumentGroup = {
+  group: string;
+  items?: ProcedureInstrumentItem[];
+};
+
+export type ProcedureImagingView = {
+  view: string;
+  purpose?: string;
+  lookFor?: string[];
+  pitfalls?: string[];
+};
+
 export type ProcedureFailureMode = {
   problem: string;
   whyItHappens?: string;
@@ -78,6 +120,12 @@ export type EvidenceClaim = {
 };
 
 export type ProcedureData = {
+  contentStatus?: "overview_seeded" | "curated" | "published";
+  legacySurgeryTable?: {
+    headers?: string[];
+    rows?: any[][];
+  };
+  sourceDiseaseTemplateVersion?: string;
   id: string;
   name: string;
   englishName?: string;
@@ -97,6 +145,16 @@ export type ProcedureData = {
   fixationStrategy?: string[];
   intraopChecks?: string[];
   failureModes?: ProcedureFailureMode[];
+  approachGuide?: ProcedureApproachGuide[];
+  surgicalSteps?: ProcedureSurgicalStep[];
+  instrumentGroups?: ProcedureInstrumentGroup[];
+  imagingChecklist?: {
+    intraop?: ProcedureImagingView[];
+    postopBaseline?: string[];
+    followUp?: string[];
+    mnemonic?: string;
+    whenToEscalateImaging?: string[];
+  };
   postopFramework?: {
     monitoring?: string[];
     rom?: string[];

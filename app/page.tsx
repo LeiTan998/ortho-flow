@@ -119,12 +119,6 @@ export default function Home() {
     [diseaseList]
   );
 
-  const selectedDiseaseHasProcedures = Boolean(
-    selectedDisease &&
-      Array.isArray(selectedDisease.procedureRefs) &&
-      selectedDisease.procedureRefs.length > 0
-  );
-
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -211,18 +205,16 @@ export default function Home() {
                 >
                   我要学习
                 </button>
-                {selectedDiseaseHasProcedures && (
-                  <button
-                    onClick={() => setMode("procedure")}
-                    className={`flex-1 rounded-xl px-5 py-2.5 text-sm font-medium transition lg:flex-none ${
-                      mode === "procedure"
-                        ? "bg-gradient-to-r from-[#20A6B9] to-[#4B8EE8] text-white shadow-[0_8px_24px_rgba(32,166,185,.18)]"
-                        : "text-[var(--of-muted)] hover:bg-[var(--of-surface)] hover:text-[var(--of-text)]"
-                    }`}
-                  >
-                    手术 Pro
-                  </button>
-                )}
+                <button
+                  onClick={() => setMode("procedure")}
+                  className={`flex-1 rounded-xl px-5 py-2.5 text-sm font-medium transition lg:flex-none ${
+                    mode === "procedure"
+                      ? "bg-gradient-to-r from-[#20A6B9] to-[#4B8EE8] text-white shadow-[0_8px_24px_rgba(32,166,185,.18)]"
+                      : "text-[var(--of-muted)] hover:bg-[var(--of-surface)] hover:text-[var(--of-text)]"
+                  }`}
+                >
+                  手术 Pro
+                </button>
               </div>
             </div>
           </div>
@@ -243,7 +235,7 @@ export default function Home() {
                     ? "沿着接诊、检查、诊断、治疗和随访逐步推进，减少遗漏，同时保留临床判断空间。"
                     : mode === "study"
                       ? "先看典型患者，再抓关键查体与影像，最后理解为什么选择某种治疗或手术。"
-                      : "围绕术前看片、体位、C臂、入路、复位顺序、固定与失败模式完成术前认知准备。"}
+                      : "先看手术概览，再按入路、解剖、步骤、器械和术中/术后影像逐步建立 Procedure。"}
                 </p>
               </div>
               <div className="grid grid-cols-3 gap-2 text-center sm:min-w-[360px]">
@@ -494,7 +486,7 @@ export default function Home() {
           <div className="mt-9 grid max-w-2xl grid-cols-3 gap-3">
             {[
               [String(diseaseList.length), "疾病主题"],
-              ["2", "工作与学习模式"],
+              ["3", "工作 / 学习 / 手术"],
               ["1", "条临床决策链"],
             ].map(([value, label]) => (
               <div
