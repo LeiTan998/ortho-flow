@@ -15,15 +15,16 @@ import type {
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 
-type ProcedureTab = "overview" | "approach" | "anatomy" | "steps" | "instruments" | "imaging";
+type ProcedureTab = "overview" | "approach" | "anatomy" | "steps" | "instruments" | "imaging" | "postop";
 
 const TAB_LABELS: Array<{ id: ProcedureTab; label: string; hint: string }> = [
   { id: "overview", label: "手术概览", hint: "先知道有哪些方案" },
-  { id: "approach", label: "入路怎么选", hint: "骨块 → 暴露 → 入路" },
+  { id: "approach", label: "入路怎么选", hint: "目标 → 暴露 → 通道" },
   { id: "anatomy", label: "解剖与危险区", hint: "一层层认结构" },
   { id: "steps", label: "手术怎么做", hint: "术前心智排练" },
   { id: "instruments", label: "器械与内固定", hint: "什么时候拿什么" },
   { id: "imaging", label: "术中 / 术后看片", hint: "做完怎么看" },
+  { id: "postop", label: "术后管理", hint: "监测 → 活动 → 负重" },
 ];
 
 function statusLabel(status?: ProcedureRef["status"]) {
@@ -230,9 +231,11 @@ function FailureModeCard({ item, index }: { item: ProcedureFailureMode; index: n
     <article className="rounded-2xl border border-[var(--of-border)] bg-[var(--of-surface)] p-4">
       <div className="flex items-start gap-3">
         <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-[var(--of-danger-border)] bg-[var(--of-danger-bg)] text-xs font-semibold text-[var(--of-danger-text)]">{index + 1}</span>
-        <div>
+        <div className="min-w-0 flex-1">
           <h4 className="font-semibold text-[var(--of-text-strong)]">{item.problem}</h4>
-          {item.prevention && <p className="mt-1 text-sm leading-6 text-[var(--of-muted)]">{item.prevention}</p>}
+          {item.whyItHappens && <p className="mt-2 text-sm leading-6 text-[var(--of-muted)]"><span className="font-medium text-[var(--of-text-strong)]">为什么会发生：</span>{item.whyItHappens}</p>}
+          {item.prevention && <p className="mt-2 text-sm leading-6 text-[var(--of-muted)]"><span className="font-medium text-[var(--of-text-strong)]">怎么避免：</span>{item.prevention}</p>}
+          {item.bailout && <p className="mt-2 text-sm leading-6 text-[var(--of-warning-text)]"><span className="font-medium">发现以后：</span>{item.bailout}</p>}
         </div>
       </div>
     </article>
@@ -250,13 +253,12 @@ function EvidenceCard({ claim }: { claim: EvidenceClaim }) {
 }
 
 export default function ProcedureMode({ disease }: { disease: DiseaseData }) {
-  // 每个疾病只读取自己的 ProcedureRefs。
-  // 额外拦截一次历史迁移错误：如果非胫骨平台疾病误挂 tibial_plateau_orif，
-  // 前端绝不展示胫骨平台手术，而是回退到该疾病自己的手术概览。
-  const procedures = useMemo(() => {
-    const refs = Array.isArray(disease.procedureRefs) ? disease.procedureRefs : [];
-    return refs.filter((item) => !(item.id === "tibial_plateau_orif" && disease.id !== "tibial_plateau"));
-  }, [disease.id, disease.procedureRefs]);
+  // Procedure Engine V1：前端不再写任何“某个疾病专属”的手术判断。
+  // 疾病 → Procedure 的归属只由 Supabase procedureRefs / relatedDiseaseIds 决定。
+  const procedures = useMemo(
+    () => (Array.isArray(disease.procedureRefs) ? disease.procedureRefs : []),
+    [disease.procedureRefs]
+  );
 
   const [selectedId, setSelectedId] = useState(procedures[0]?.id || "");
   const [procedureData, setProcedureData] = useState<ProcedureData | null>(null);
@@ -322,7 +324,7 @@ export default function ProcedureMode({ disease }: { disease: DiseaseData }) {
         <header className="rounded-[28px] border border-[var(--of-border)] bg-[var(--of-surface)] p-6 shadow-[0_16px_50px_rgba(39,76,79,.07)]">
           <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--of-accent)]/75">Procedure Pro</div>
           <h3 className="mt-2 text-xl font-semibold text-[var(--of-text-strong)]">{disease.name} · 手术 Pro</h3>
-          <p className="mt-2 text-sm leading-7 text-[var(--of-muted)]">每个疾病都预留手术区。当前数据库尚未建立该疾病的独立 Procedure 记录，先显示疾病模板里已有的手术策略；执行统一迁移 SQL 后会自动建立对应数据。</p>
+          <p className="mt-2 text-sm leading-7 text-[var(--of-muted)]">每个疾病都预留手术区。当前尚未关联具体 Procedure；安装 Procedure Engine 后，以后只需要在 Supabase 运行该手术的 SQL 模板即可自动出现。</p>
         </header>
         {hasFallbackTable ? (
           <Card title="现有手术策略概览"><SurgeryStrategyTable table={fallbackTable} /></Card>
@@ -339,11 +341,30 @@ export default function ProcedureMode({ disease }: { disease: DiseaseData }) {
     if (tab.id === "overview") return true;
     if (tab.id === "approach") return approaches.length > 0;
     if (tab.id === "anatomy") return approaches.some((item) => item.anatomyLayers?.length) || Boolean(procedureData?.dangerStructures?.length);
-    if (tab.id === "steps") return Boolean(procedureData?.surgicalSteps?.length || procedureData?.failureModes?.length);
-    if (tab.id === "instruments") return Boolean(procedureData?.instrumentGroups?.length);
-    if (tab.id === "imaging") return Boolean(procedureData?.imagingChecklist);
+    if (tab.id === "steps") return Boolean(
+      procedureData?.surgicalSteps?.length ||
+      procedureData?.failureModes?.length ||
+      procedureData?.reductionSequence?.length ||
+      procedureData?.fixationStrategy?.length
+    );
+    if (tab.id === "instruments") return Boolean(procedureData?.instrumentGroups?.length || procedureData?.instruments?.length);
+    if (tab.id === "imaging") return Boolean(
+      procedureData?.imagingChecklist ||
+      procedureData?.cArm?.length ||
+      procedureData?.intraopChecks?.length
+    );
+    if (tab.id === "postop") return Boolean(
+      procedureData?.postopFramework?.monitoring?.length ||
+      procedureData?.postopFramework?.rom?.length ||
+      procedureData?.postopFramework?.weightBearing?.length ||
+      procedureData?.postopFramework?.followUp?.length
+    );
     return false;
   });
+
+  // 如果从一台内容更丰富的手术切到一台内容较少的手术，
+  // 当前 tab 可能已经不存在。此时自动回到“手术概览”，避免出现空白页。
+  const visibleTab: ProcedureTab = availableTabs.some((tab) => tab.id === activeTab) ? activeTab : "overview";
 
   return (
     <div className="grid grid-cols-1 gap-5 xl:grid-cols-[280px_minmax(0,1fr)]">
@@ -386,7 +407,7 @@ export default function ProcedureMode({ disease }: { disease: DiseaseData }) {
         <div className="overflow-x-auto rounded-2xl border border-[var(--of-border)] bg-[var(--of-surface)] p-2">
           <div className="flex min-w-max gap-2">
             {availableTabs.map((tab) => {
-              const active = activeTab === tab.id;
+              const active = visibleTab === tab.id;
               return (
                 <button key={tab.id} type="button" onClick={() => setActiveTab(tab.id)} className={`rounded-xl border px-4 py-3 text-left transition ${active ? "border-[var(--of-accent-border)] bg-[var(--of-accent-soft)]" : "border-transparent hover:border-[var(--of-border)] hover:bg-[var(--of-surface-muted)]"}`}>
                   <div className={`text-sm font-semibold ${active ? "text-[var(--of-accent)]" : "text-[var(--of-text-strong)]"}`}>{tab.label}</div>
@@ -407,7 +428,7 @@ export default function ProcedureMode({ disease }: { disease: DiseaseData }) {
 
         {procedureData && !loading && (
           <>
-            {activeTab === "overview" && (
+            {visibleTab === "overview" && (
               <div className="space-y-4">
                 {procedureData.contentStatus === "overview_seeded" && (
                   <Card title="这是统一迁移的手术概览" tone="warning">
@@ -419,6 +440,8 @@ export default function ProcedureMode({ disease }: { disease: DiseaseData }) {
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                   {!!procedureData.indicationScenarios?.length && <Card title="常见进入手术讨论的场景"><MiniList items={procedureData.indicationScenarios} /></Card>}
                   {!!procedureData.notSuitableScenarios?.length && <Card title="先别急着按这个方案做" tone="warning"><MiniList items={procedureData.notSuitableScenarios} tone="warning" /></Card>}
+                  {!!procedureData.preopImaging?.length && <Card title="术前影像 / 计划"><MiniList items={procedureData.preopImaging} /></Card>}
+                  {!!procedureData.positioning?.length && <Card title="体位与摆台"><MiniList items={procedureData.positioning} /></Card>}
                 </div>
                 {(overviewTable?.headers?.length || overviewTable?.rows?.length) ? (
                   <Card title="疾病模板里的手术策略"><SurgeryStrategyTable table={overviewTable} /></Card>
@@ -428,24 +451,26 @@ export default function ProcedureMode({ disease }: { disease: DiseaseData }) {
               </div>
             )}
 
-            {activeTab === "approach" && (
+            {visibleTab === "approach" && (
               <div className="space-y-4">
-                <Card title="先记住这一句" tone="accent"><p className="text-sm leading-7 text-[var(--of-text-strong)]">不是 Schatzker 几型决定切口，而是 CT 上“哪块骨头需要被直接看见、复位和支撑”决定入路。</p></Card>
+                <Card title="先记住这一句" tone="accent"><p className="text-sm leading-7 text-[var(--of-text-strong)]">{procedureData.approachPrinciple || "入路和工作通道服务于目标结构、复位与固定路径；不要为了沿用一个切口而强行扩大到不熟悉的危险区域。"}</p></Card>
                 {approaches.map((approach) => <ApproachDecisionCard key={approach.id} approach={approach} />)}
               </div>
             )}
 
-            {activeTab === "anatomy" && (
+            {visibleTab === "anatomy" && (
               <div className="space-y-4">
                 {approaches.filter((item) => item.anatomyLayers?.length).map((approach) => <AnatomyCard key={approach.id} approach={approach} />)}
                 {!!procedureData.dangerStructures?.length && <Card title="跨入路都要记住的危险点" tone="danger"><MiniList items={procedureData.dangerStructures} tone="danger" /></Card>}
               </div>
             )}
 
-            {activeTab === "steps" && (
+            {visibleTab === "steps" && (
               <div className="space-y-4">
-                <Card title="手术主线" tone="accent"><p className="text-sm leading-7 text-[var(--of-text-strong)]">这是“脑中走一遍”的常见主线，不是所有骨折机械照做。复杂双髁、后柱和特殊软组织情况必须按真实 CT 形态调整顺序。</p></Card>
+                <Card title="手术主线" tone="accent"><p className="text-sm leading-7 text-[var(--of-text-strong)]">{procedureData.procedureSequenceNote || "这是术前认知主线，不是所有病例机械照做。具体顺序应根据病变形态、复位质量、植入物系统和术中影像动态调整。"}</p></Card>
                 {(procedureData.surgicalSteps || []).map((step, index) => <StepCard key={step.id} step={step} index={index} />)}
+                {!!procedureData.reductionSequence?.length && <Card title="复位顺序"><MiniList items={procedureData.reductionSequence} /></Card>}
+                {!!procedureData.fixationStrategy?.length && <Card title="固定策略"><MiniList items={procedureData.fixationStrategy} /></Card>}
                 {!!procedureData.failureModes?.length && (
                   <div>
                     <h4 className="mb-3 text-lg font-semibold text-[var(--of-text-strong)]">最常见的翻车点</h4>
@@ -457,28 +482,44 @@ export default function ProcedureMode({ disease }: { disease: DiseaseData }) {
               </div>
             )}
 
-            {activeTab === "instruments" && (
+            {visibleTab === "instruments" && (
               <div className="space-y-4">
-                <Card title="看器械时别先背品牌" tone="accent"><p className="text-sm leading-7 text-[var(--of-text-strong)]">先问这个器械在“暴露、牵开、复位、临时固定、最终固定”哪一步出现，它解决什么问题。</p></Card>
+                <Card title="看器械时别先背品牌" tone="accent"><p className="text-sm leading-7 text-[var(--of-text-strong)]">{procedureData.instrumentPrinciple || "先问这个器械在哪一步出现、解决什么问题，再去记具体品牌和型号。"}</p></Card>
+                {!!procedureData.instruments?.length && <Card title="器械 / 内固定准备"><MiniList items={procedureData.instruments} /></Card>}
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                   {(procedureData.instrumentGroups || []).map((group) => <InstrumentGroupCard key={group.group} group={group} />)}
                 </div>
               </div>
             )}
 
-            {activeTab === "imaging" && (
+            {visibleTab === "imaging" && (
               <div className="space-y-4">
-                <Card title="术中透视" tone="accent"><p className="text-sm leading-7 text-[var(--of-text-strong)]">不要满足于一句“正侧位满意”。每个视图都要回答它正在排除什么错误。</p></Card>
+                <Card title="术中透视" tone="accent"><p className="text-sm leading-7 text-[var(--of-text-strong)]">{procedureData.imagingPrinciple || "不要满足于一句“正侧位满意”。每个视图都要回答：复位是否维持、植入物是否在正确位置、有没有某个方向仍然看不清。"}</p></Card>
+                {!!procedureData.cArm?.length && <Card title="C 臂与投照准备"><MiniList items={procedureData.cArm} /></Card>}
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
                   {(procedureData.imagingChecklist?.intraop || []).map((item) => <ImagingViewCard key={item.view} item={item} />)}
                 </div>
-                <Card title={`术后第一张片：${procedureData.imagingChecklist?.mnemonic || "建立基准片"}`}>
-                  <MiniList items={procedureData.imagingChecklist?.postopBaseline} />
-                </Card>
-                <Card title="后续复查：永远和术后基准片比较">
-                  <MiniList items={procedureData.imagingChecklist?.followUp} />
-                </Card>
+                {!!procedureData.intraopChecks?.length && <Card title="最终术中检查"><MiniList items={procedureData.intraopChecks} /></Card>}
+                {!!procedureData.imagingChecklist?.postopBaseline?.length && (
+                  <Card title={`术后第一张片：${procedureData.imagingChecklist?.mnemonic || "建立基准片"}`}>
+                    <MiniList items={procedureData.imagingChecklist?.postopBaseline} />
+                  </Card>
+                )}
+                {!!procedureData.imagingChecklist?.followUp?.length && (
+                  <Card title="后续复查：永远和术后基准片比较">
+                    <MiniList items={procedureData.imagingChecklist?.followUp} />
+                  </Card>
+                )}
                 {!!procedureData.imagingChecklist?.whenToEscalateImaging?.length && <Card title="什么时候不要只盯普通 X 线" tone="warning"><MiniList items={procedureData.imagingChecklist.whenToEscalateImaging} tone="warning" /></Card>}
+              </div>
+            )}
+
+            {visibleTab === "postop" && (
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                {!!procedureData.postopFramework?.monitoring?.length && <Card title="术后监测"><MiniList items={procedureData.postopFramework.monitoring} /></Card>}
+                {!!procedureData.postopFramework?.rom?.length && <Card title="活动度 / 锻炼"><MiniList items={procedureData.postopFramework.rom} /></Card>}
+                {!!procedureData.postopFramework?.weightBearing?.length && <Card title="负重进阶" tone="warning"><MiniList items={procedureData.postopFramework.weightBearing} tone="warning" /></Card>}
+                {!!procedureData.postopFramework?.followUp?.length && <Card title="随访重点"><MiniList items={procedureData.postopFramework.followUp} /></Card>}
               </div>
             )}
 
