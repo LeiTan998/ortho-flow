@@ -1,0 +1,77 @@
+name: OrthoFlow Auto Curator
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "先用 pfna_test 做盲测；稳定后再用 scan_one"
+        required: true
+        type: choice
+        default: pfna_test
+        options:
+          - pfna_test
+          - scan_one
+      save_draft:
+        description: "是否把结果保存到 Supabase 待审核队列"
+        required: true
+        type: boolean
+        default: false
+  schedule:
+    # 每天 03:37（北京时间）自动扫描一次；避开整点更不容易拥堵。
+    - cron: "37 3 * * *"
+      timezone: "Asia/Shanghai"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: orthoflow-auto-curator
+  cancel-in-progress: false
+
+jobs:
+  curator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      AUTOCURATOR_MODEL: gemini-3.7-flash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: python -m pip install --upgrade requests jsonschema
+
+      - name: Static self-test
+        run: python scripts/ortho_auto_curator.py --self-test
+
+      - name: Scheduled scan — generate one draft
+        if: github.event_name == 'schedule'
+        run: python scripts/ortho_auto_curator.py --mode scan_one --save-draft
+
+      - name: Manual test/run
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          args=(--mode "${{ inputs.mode }}")
+          if [[ "${{ inputs.save_draft }}" == "true" ]]; then
+            args+=(--save-draft)
+          fi
+          python scripts/ortho_auto_curator.py "${args[@]}"
+
+      - name: Upload generated JSON
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: auto-curator-output-${{ github.run_number }}
+          path: autocurator_output/
+          if-no-files-found: ignore
+          retention-days: 14
