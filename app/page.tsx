@@ -12,10 +12,58 @@ import type { DiseaseData, DiseaseMode } from "@/types/orthoflow";
 import { isSearchAnalyticsOptedOut, logSearchClick } from "@/lib/searchAnalytics";
 
 
+const CATALOG_CACHE_KEY = "orthoflow:disease-catalog:v1";
+const DISEASE_CACHE_PREFIX = "orthoflow:disease:v1:";
+
+function readLocalCache<T>(key: string): T | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return null;
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
+function writeLocalCache(key: string, value: unknown) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Safari 私密模式 / 空间不足时忽略缓存失败，不影响主流程。
+  }
+}
+
+async function fetchJsonWithRetry<T>(url: string, attempts = 3): Promise<T> {
+  let lastError: unknown = new Error("请求失败");
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      const response = await fetch(url, { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      return (await response.json()) as T;
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts - 1) {
+        await new Promise((resolve) =>
+          window.setTimeout(resolve, 500 * 2 ** attempt)
+        );
+      }
+    }
+  }
+
+  throw lastError;
+}
+
 export default function Home() {
   const [diseaseList, setDiseaseList] = useState<DiseaseData[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+  const [diseaseLoadError, setDiseaseLoadError] = useState("");
+  const [openingDiseaseId, setOpeningDiseaseId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedDisease, setSelectedDisease] = useState<DiseaseData | null>(null);
   const [mode, setMode] = useState<DiseaseMode>("work");
@@ -23,33 +71,42 @@ export default function Home() {
   const homeBackgroundRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+
     async function loadDiseases() {
-      setLoading(true);
       setLoadError("");
 
-      const { data, error } = await supabase.from("diseases").select("*");
-
-      if (error) {
-        console.error("加载疾病失败:", error);
-        setDiseaseList([]);
-        setLoadError(error.message || "疾病数据加载失败");
+      // 先使用上一次成功目录，让弱网手机尽快出现首页；随后后台刷新。
+      const cached = readLocalCache<DiseaseData[]>(CATALOG_CACHE_KEY);
+      if (Array.isArray(cached) && cached.length > 0) {
+        setDiseaseList(cached);
         setLoading(false);
-        return;
+      } else {
+        setLoading(true);
       }
 
-      const diseases = (data || [])
-        .filter((item: any) => item?.data && typeof item.data === "object")
-        .map((item: any) => ({
-          ...item.data,
-          viewCount: Number(item.view_count || 0),
-        }))
-        .filter((item: any) => item.id && item.name && item.englishName);
+      try {
+        const diseases = await fetchJsonWithRetry<DiseaseData[]>("/api/diseases");
+        if (cancelled) return;
 
-      setDiseaseList(diseases);
-      setLoading(false);
+        setDiseaseList(diseases);
+        writeLocalCache(CATALOG_CACHE_KEY, diseases);
+        setLoading(false);
+      } catch (error) {
+        if (cancelled) return;
+        console.error("加载疾病目录失败:", error);
+        setLoading(false);
+
+        if (!cached || cached.length === 0) {
+          setLoadError("当前网络连接不稳定，暂时无法加载疾病目录。");
+        }
+      }
     }
 
     loadDiseases();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleOpenDisease = async (
@@ -61,38 +118,56 @@ export default function Home() {
     const resultCountAtClick = filteredDiseases.length;
     const analyticsOptedOut = isSearchAnalyticsOptedOut();
 
-    setSelectedDisease(disease);
-    setCurrentStep(0);
-    setMode("work");
-    setSearchTerm("");
+    setDiseaseLoadError("");
+    setOpeningDiseaseId(disease.id);
 
-    if (!countAsSearch) return;
+    try {
+      const cacheKey = `${DISEASE_CACHE_PREFIX}${disease.id}`;
+      const cachedDisease = readLocalCache<DiseaseData>(cacheKey);
+      let fullDisease: DiseaseData;
 
-    // 当前设备若被标记为内部测试设备：
-    // 既不写 search_logs，也不增加 view_count，避免污染真实用户数据。
-    if (analyticsOptedOut) return;
+      try {
+        fullDisease = await fetchJsonWithRetry<DiseaseData>(
+          `/api/diseases/${encodeURIComponent(disease.id)}`
+        );
+        writeLocalCache(cacheKey, fullDisease);
+      } catch (error) {
+        if (!cachedDisease) throw error;
+        fullDisease = cachedDisease;
+      }
 
-    // 将这次“搜索 → 点击疾病”写回 search_logs.clicked_disease_id。
-    // 如果 1 秒自动搜索日志已经存在，API 会更新那一条；
-    // 如果用户点击很快、自动日志还没写入，API 会直接补一条点击日志。
-    void logSearchClick(queryAtClick, resultCountAtClick, disease.id);
+      setSelectedDisease(fullDisease);
+      setCurrentStep(0);
+      setMode("work");
+      setSearchTerm("");
 
-    const { error } = await supabase.rpc("increment_disease_view", {
-      p_disease_id: disease.id,
-    });
+      if (!countAsSearch || analyticsOptedOut) return;
 
-    if (error) {
-      console.error("记录疾病搜索热度失败:", error);
-      return;
+      void logSearchClick(queryAtClick, resultCountAtClick, disease.id);
+
+      // 浏览计数失败不能阻塞用户进入疾病页面。
+      void supabase
+        .rpc("increment_disease_view", { p_disease_id: disease.id })
+        .then(({ error }) => {
+          if (error) {
+            console.error("记录疾病搜索热度失败:", error);
+            return;
+          }
+
+          setDiseaseList((currentList) =>
+            currentList.map((item) =>
+              item.id === disease.id
+                ? { ...item, viewCount: Number(item.viewCount || 0) + 1 }
+                : item
+            )
+          );
+        });
+    } catch (error) {
+      console.error("加载疾病详情失败:", error);
+      setDiseaseLoadError("这个疾病暂时加载失败，请检查网络后再点一次。");
+    } finally {
+      setOpeningDiseaseId(null);
     }
-
-    setDiseaseList((currentList) =>
-      currentList.map((item) =>
-        item.id === disease.id
-          ? { ...item, viewCount: item.viewCount + 1 }
-          : item
-      )
-    );
   };
 
   const normalizedSearchTerm = searchTerm.trim().toLowerCase();
@@ -131,8 +206,15 @@ export default function Home() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
         <div className="max-w-xl rounded-2xl border border-red-200 bg-white p-6 shadow-sm">
-          <h1 className="text-lg font-semibold text-red-700">疾病数据加载失败</h1>
+          <h1 className="text-lg font-semibold text-red-700">疾病目录暂时加载失败</h1>
           <p className="mt-3 break-words text-sm text-gray-600">{loadError}</p>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="mt-4 rounded-xl bg-[#20A6B9] px-4 py-2 text-sm font-medium text-white"
+          >
+            重新加载
+          </button>
         </div>
       </div>
     );
@@ -456,6 +538,18 @@ export default function Home() {
                 暂未找到匹配疾病。可以尝试中文名、英文名、拼音或常用缩写。
               </div>
             )}
+
+            {diseaseLoadError && (
+              <div className="mt-3 rounded-[22px] border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800">
+                {diseaseLoadError}
+              </div>
+            )}
+
+            {openingDiseaseId && (
+              <div className="mt-3 text-center text-xs text-[var(--of-muted)]">
+                正在加载疾病详情…
+              </div>
+            )}
           </div>
 
           {!searchTerm && popularDiseases.length > 0 && (
@@ -697,4 +791,3 @@ export default function Home() {
     </div>
   );
 }
-
