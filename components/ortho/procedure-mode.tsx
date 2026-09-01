@@ -93,6 +93,55 @@ function Card({ title, children, tone = "normal" }: { title: string; children: R
   );
 }
 
+
+function PreopToleranceCard() {
+  const items = [
+    {
+      title: "心肺状态",
+      body: "没有明显失代偿性心衰、持续缺氧、严重未控制心律失常或其他明显不稳定的心肺情况。",
+    },
+    {
+      title: "血红蛋白 / 凝血",
+      body: "没有严重或有症状的未纠正贫血；没有明显未纠正的凝血障碍。抗凝/抗血小板药按手术和麻醉计划处理。",
+    },
+    {
+      title: "肝肾功能",
+      body: "没有明显肝功能失代偿；没有严重未纠正的肾功能恶化、容量异常或电解质紊乱。",
+    },
+    {
+      title: "感染 / 代谢",
+      body: "没有未控制的全身性感染、严重高血糖危象或其他明显急性代谢紊乱。",
+    },
+    {
+      title: "总体状态",
+      body: "生命体征基本稳定，脱水、营养和重要内科问题已达到可以进入麻醉评估与手术准备的状态。",
+    },
+  ];
+
+  return (
+    <Card title="骨科手术前 · 基础手术耐受底线" tone="accent">
+      <p className="text-sm leading-7 text-[var(--of-text-strong)]">
+        这不是本术式单独的“手术适应证”，而是所有骨科手术共用的一层基础筛查：骨科手术本身有指征后，再确认患者没有明显需要先纠正或进一步评估的全身问题。
+      </p>
+      <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {items.map((item) => (
+          <div key={item.title} className="rounded-xl border border-[var(--of-border)] bg-[var(--of-surface)] p-4">
+            <div className="font-semibold text-[var(--of-text-strong)]">{item.title}</div>
+            <p className="mt-2 text-sm leading-6 text-[var(--of-muted)]">{item.body}</p>
+          </div>
+        ))}
+      </div>
+      <div className="mt-4 rounded-xl border border-[var(--of-warning-border)] bg-[var(--of-warning-bg)] p-4 text-sm leading-7 text-[var(--of-warning-text)]">
+        <span className="font-semibold">出现明显异常时：</span>
+        不是简单等同于“不能手术”，而是先纠正、会诊或由麻醉科进一步评估；是否延期还要结合手术紧急程度和风险收益。
+      </div>
+      <p className="mt-3 text-xs leading-5 text-[var(--of-muted)]">
+        本模块刻意不设置统一的 EF、肌酐或 Hb“硬门槛”；这些数值应结合症状、基础疾病、预计失血、手术紧急程度和麻醉方案解释。
+      </p>
+    </Card>
+  );
+}
+
 function SurgeryStrategyTable({ table }: { table?: { headers?: string[]; rows?: any[][] } }) {
   const headers = Array.isArray(table?.headers) ? table?.headers || [] : [];
   const rows = Array.isArray(table?.rows) ? table?.rows || [] : [];
@@ -491,6 +540,7 @@ export default function ProcedureMode({ disease }: { disease: DiseaseData }) {
                 )}
                 {procedureData.scope && <Card title="这个手术区解决什么"><p className="text-sm leading-7 text-[var(--of-muted)]">{procedureData.scope}</p></Card>}
                 {!!procedureData.goals?.length && <Card title="主要目标" tone="accent"><MiniList items={procedureData.goals} /></Card>}
+                <PreopToleranceCard />
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                   {!!procedureData.indicationScenarios?.length && <Card title="常见进入手术讨论的场景"><MiniList items={procedureData.indicationScenarios} /></Card>}
                   {!!procedureData.notSuitableScenarios?.length && <Card title="先别急着按这个方案做" tone="warning"><MiniList items={procedureData.notSuitableScenarios} tone="warning" /></Card>}
