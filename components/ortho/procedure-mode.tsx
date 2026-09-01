@@ -17,6 +17,27 @@ import type { ReactNode } from "react";
 
 type ProcedureTab = "overview" | "approach" | "anatomy" | "steps" | "instruments" | "imaging" | "postop";
 
+type RehabActivity = {
+  id?: string;
+  activity: string;
+  category?: string;
+  impactLevel?: "low" | "moderate" | "high" | "daily" | string;
+  typicalWindow?: string;
+  unlockCriteria?: string[];
+  delayFactors?: string[];
+  specialNotes?: string[];
+  reviewTriggers?: string[];
+};
+
+type RehabContract = {
+  principle?: string;
+  locks?: Array<{ id?: string; name: string; question?: string }>;
+  globalRedFlags?: string[];
+  activities?: RehabActivity[];
+};
+
+type ProcedureDataWithRehab = ProcedureData & { rehabContract?: RehabContract };
+
 const TAB_LABELS: Array<{ id: ProcedureTab; label: string; hint: string }> = [
   { id: "overview", label: "手术概览", hint: "先知道有哪些方案" },
   { id: "approach", label: "入路怎么选", hint: "目标 → 暴露 → 通道" },
@@ -252,6 +273,36 @@ function EvidenceCard({ claim }: { claim: EvidenceClaim }) {
   );
 }
 
+function activityLevelLabel(level?: string) {
+  if (level === "low") return "低冲击";
+  if (level === "moderate") return "中等冲击";
+  if (level === "high") return "高冲击";
+  if (level === "daily") return "日常活动";
+  return level || "功能活动";
+}
+
+function RehabActivityCard({ item }: { item: RehabActivity }) {
+  return (
+    <article className="rounded-2xl border border-[var(--of-border)] bg-[var(--of-surface)] p-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h4 className="text-lg font-semibold text-[var(--of-text-strong)]">{item.activity}</h4>
+        <span className="rounded-full border border-[var(--of-accent-border)] bg-[var(--of-accent-soft)] px-2.5 py-1 text-[10px] font-semibold text-[var(--of-accent)]">{activityLevelLabel(item.impactLevel)}</span>
+      </div>
+      {item.typicalWindow && (
+        <div className="mt-3 rounded-xl border border-[var(--of-accent-border)] bg-[var(--of-accent-soft)] px-3 py-2 text-sm leading-6 text-[var(--of-text-strong)]">
+          <span className="font-semibold">参考时间窗：</span>{item.typicalWindow}
+        </div>
+      )}
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {!!item.unlockCriteria?.length && <Card title="解锁条件" tone="accent"><MiniList items={item.unlockCriteria} /></Card>}
+        {!!item.delayFactors?.length && <Card title="什么情况要延后" tone="warning"><MiniList items={item.delayFactors} tone="warning" /></Card>}
+        {!!item.specialNotes?.length && <Card title="特别注意"><MiniList items={item.specialNotes} /></Card>}
+        {!!item.reviewTriggers?.length && <Card title="需要重新评估" tone="danger"><MiniList items={item.reviewTriggers} tone="danger" /></Card>}
+      </div>
+    </article>
+  );
+}
+
 export default function ProcedureMode({ disease }: { disease: DiseaseData }) {
   // Procedure Engine V1：前端不再写任何“某个疾病专属”的手术判断。
   // 疾病 → Procedure 的归属只由 Supabase procedureRefs / relatedDiseaseIds 决定。
@@ -336,6 +387,7 @@ export default function ProcedureMode({ disease }: { disease: DiseaseData }) {
   }
 
   const approaches = procedureData?.approachGuide || [];
+  const rehabContract = (procedureData as ProcedureDataWithRehab | null)?.rehabContract;
   const overviewTable = procedureData?.legacySurgeryTable || disease.surgeryTable;
   const availableTabs = TAB_LABELS.filter((tab) => {
     if (tab.id === "overview") return true;
@@ -357,7 +409,9 @@ export default function ProcedureMode({ disease }: { disease: DiseaseData }) {
       procedureData?.postopFramework?.monitoring?.length ||
       procedureData?.postopFramework?.rom?.length ||
       procedureData?.postopFramework?.weightBearing?.length ||
-      procedureData?.postopFramework?.followUp?.length
+      procedureData?.postopFramework?.followUp?.length ||
+      rehabContract?.activities?.length ||
+      rehabContract?.locks?.length
     );
     return false;
   });
@@ -515,11 +569,47 @@ export default function ProcedureMode({ disease }: { disease: DiseaseData }) {
             )}
 
             {visibleTab === "postop" && (
-              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                {!!procedureData.postopFramework?.monitoring?.length && <Card title="术后监测"><MiniList items={procedureData.postopFramework.monitoring} /></Card>}
-                {!!procedureData.postopFramework?.rom?.length && <Card title="活动度 / 锻炼"><MiniList items={procedureData.postopFramework.rom} /></Card>}
-                {!!procedureData.postopFramework?.weightBearing?.length && <Card title="负重进阶" tone="warning"><MiniList items={procedureData.postopFramework.weightBearing} tone="warning" /></Card>}
-                {!!procedureData.postopFramework?.followUp?.length && <Card title="随访重点"><MiniList items={procedureData.postopFramework.followUp} /></Card>}
+              <div className="space-y-5">
+                {rehabContract && (
+                  <>
+                    <Card title="康复不是按周自动解锁" tone="accent">
+                      <p className="text-sm leading-7 text-[var(--of-text-strong)]">{rehabContract.principle || "时间只是参考；活动恢复要同时看组织/假体、症状、功能和风险。"}</p>
+                    </Card>
+
+                    {!!rehabContract.locks?.length && (
+                      <div>
+                        <h4 className="mb-3 text-lg font-semibold text-[var(--of-text-strong)]">活动解锁 · 五把锁</h4>
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                          {rehabContract.locks.map((lock, index) => (
+                            <article key={lock.id || index} className="rounded-2xl border border-[var(--of-border)] bg-[var(--of-surface)] p-4">
+                              <div className="text-xs font-semibold text-[var(--of-accent)]">0{index + 1}</div>
+                              <div className="mt-1 font-semibold text-[var(--of-text-strong)]">{lock.name}</div>
+                              {lock.question && <p className="mt-2 text-xs leading-5 text-[var(--of-muted)]">{lock.question}</p>}
+                            </article>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {!!rehabContract.globalRedFlags?.length && <Card title="任何阶段出现这些情况，先暂停进阶" tone="danger"><MiniList items={rehabContract.globalRedFlags} tone="danger" /></Card>}
+
+                    {!!rehabContract.activities?.length && (
+                      <div>
+                        <h4 className="mb-3 text-lg font-semibold text-[var(--of-text-strong)]">Return to Activity · 功能回归</h4>
+                        <div className="space-y-4">
+                          {rehabContract.activities.map((item, index) => <RehabActivityCard key={item.id || `${item.activity}-${index}`} item={item} />)}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                  {!!procedureData.postopFramework?.monitoring?.length && <Card title="术后监测"><MiniList items={procedureData.postopFramework.monitoring} /></Card>}
+                  {!!procedureData.postopFramework?.rom?.length && <Card title="活动度 / 锻炼"><MiniList items={procedureData.postopFramework.rom} /></Card>}
+                  {!!procedureData.postopFramework?.weightBearing?.length && <Card title="负重进阶" tone="warning"><MiniList items={procedureData.postopFramework.weightBearing} tone="warning" /></Card>}
+                  {!!procedureData.postopFramework?.followUp?.length && <Card title="随访重点"><MiniList items={procedureData.postopFramework.followUp} /></Card>}
+                </div>
               </div>
             )}
 
