@@ -64,6 +64,7 @@ export default function Home() {
   const [loadError, setLoadError] = useState("");
   const [diseaseLoadError, setDiseaseLoadError] = useState("");
   const [openingDiseaseId, setOpeningDiseaseId] = useState<string | null>(null);
+  const [audience, setAudience] = useState<"patient" | "clinician">("clinician");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedDisease, setSelectedDisease] = useState<DiseaseData | null>(null);
   const [mode, setMode] = useState<DiseaseMode>("work");
@@ -216,6 +217,175 @@ export default function Home() {
             重新加载
           </button>
         </div>
+      </div>
+    );
+  }
+
+  if (selectedDisease && audience === "patient") {
+    return (
+      <div className="relative min-h-screen overflow-x-hidden bg-[var(--of-bg)] text-[var(--of-text)] transition-colors duration-300">
+        <header className="sticky top-0 z-40 border-b border-[var(--of-border)] bg-[var(--of-surface)]/95 backdrop-blur-xl">
+          <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
+            <div className="flex min-w-0 items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setSelectedDisease(null)}
+                className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl border border-[var(--of-border)] bg-[var(--of-surface)] px-3 text-sm text-[var(--of-muted)] transition hover:bg-[var(--of-accent-soft)]"
+              >
+                ← 返回
+              </button>
+              <div className="min-w-0">
+                <div className="truncate text-lg font-semibold text-[var(--of-text-strong)]">
+                  {selectedDisease.name}
+                </div>
+                <div className="truncate text-xs text-[var(--of-muted)]">
+                  患者理解模式 · Patient Guide
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setAudience("clinician");
+                setMode("study");
+              }}
+              className="shrink-0 rounded-xl border border-[var(--of-border)] bg-[var(--of-surface)] px-3 py-2 text-xs font-medium text-[var(--of-muted)] transition hover:border-[#A4D7DD] hover:bg-[var(--of-accent-soft)] hover:text-[var(--of-text)]"
+            >
+              医生 / 学习端
+            </button>
+          </div>
+        </header>
+
+        <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
+          <section className="overflow-hidden rounded-[28px] border border-[var(--of-border)] bg-[var(--of-surface)] p-5 shadow-[0_18px_60px_rgba(39,76,79,.08)] sm:p-7">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--of-accent)]">
+              OrthoFlow · 我现在该怎么办
+            </div>
+            <h1 className="mt-3 text-2xl font-semibold tracking-tight text-[var(--of-text-strong)] sm:text-3xl">
+              先把最担心的 3 个问题弄明白
+            </h1>
+            <p className="mt-3 max-w-3xl text-sm leading-7 text-[var(--of-muted)]">
+              这里不替你在线下最终诊断，而是帮你理解医生通常依据什么判断严重程度、为什么选择保守或手术，以及恢复进度应该怎么看。
+            </p>
+          </section>
+
+          <div className="mt-5 grid gap-4">
+            <section className="rounded-[24px] border border-[var(--of-border)] bg-[var(--of-surface)] p-5 sm:p-6">
+              <div className="flex items-start gap-4">
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-[var(--of-accent-soft)] text-sm font-semibold text-[var(--of-accent)]">01</div>
+                <div>
+                  <h2 className="text-xl font-semibold text-[var(--of-text-strong)]">我这个严重吗？</h2>
+                  <p className="mt-2 text-sm leading-7 text-[var(--of-muted)]">
+                    “严重不严重”通常不能只看报告里的一个词，也不能只看单张片子。医生会把症状、查体、完整影像、功能受限程度和病程放在一起判断。
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                {[
+                  ["症状", "疼痛、麻木、无力、肿胀、活动受限以及是否越来越重。"],
+                  ["影像", "损伤位置、移位/稳定性、软骨或韧带情况，以及影像是否与症状对应。"],
+                  ["功能", "能不能正常走路、负重、抬举、上下楼、工作或运动。"],
+                ].map(([title, body]) => (
+                  <div key={title} className="rounded-2xl border border-[var(--of-border)] bg-[var(--of-surface-muted)] p-4">
+                    <div className="text-sm font-semibold text-[var(--of-text-strong)]">{title}</div>
+                    <div className="mt-1 text-xs leading-6 text-[var(--of-muted)]">{body}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-xs leading-6 text-amber-900">
+                如果出现进行性肢体无力、明显感觉异常、肢端发凉/苍白、无法控制的剧烈疼痛，或其他快速恶化表现，不要只在网上判断，应及时线下就诊。
+              </div>
+            </section>
+
+            <section className="rounded-[24px] border border-[var(--of-border)] bg-[var(--of-surface)] p-5 sm:p-6">
+              <div className="flex items-start gap-4">
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-[var(--of-accent-soft)] text-sm font-semibold text-[var(--of-accent)]">02</div>
+                <div>
+                  <h2 className="text-xl font-semibold text-[var(--of-text-strong)]">我需要手术吗？</h2>
+                  <p className="mt-2 text-sm leading-7 text-[var(--of-muted)]">
+                    同一种病，不同患者可以得到不同方案。手术通常不是由“某个分型”或“报告写了撕裂/骨折”自动决定，而是看保守治疗能否达到目标，以及继续等待会不会增加风险。
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-2xl border border-[var(--of-border)] bg-[var(--of-surface-muted)] p-4">
+                  <div className="text-sm font-semibold text-[var(--of-text-strong)]">为什么可能先保守？</div>
+                  <div className="mt-2 text-xs leading-6 text-[var(--of-muted)]">
+                    结构相对稳定、功能损失有限、症状可控，或有合理机会通过保护、药物和康复达到治疗目标。
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-[var(--of-border)] bg-[var(--of-surface-muted)] p-4">
+                  <div className="text-sm font-semibold text-[var(--of-text-strong)]">为什么可能考虑手术？</div>
+                  <div className="mt-2 text-xs leading-6 text-[var(--of-muted)]">
+                    明显不稳定/移位、重要结构受损、进行性功能问题，或规范保守治疗后仍无法达到可接受的功能目标等。
+                  </div>
+                </div>
+              </div>
+              <p className="mt-4 text-xs leading-6 text-[var(--of-muted)]">
+                具体到 {selectedDisease.name}，仍要结合你的年龄、活动需求、完整影像和查体。网站帮助理解决策逻辑，不代替面诊后的个体化手术指征。
+              </p>
+            </section>
+
+            <section className="rounded-[24px] border border-[var(--of-border)] bg-[var(--of-surface)] p-5 sm:p-6">
+              <div className="flex items-start gap-4">
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-[var(--of-accent-soft)] text-sm font-semibold text-[var(--of-accent)]">03</div>
+                <div>
+                  <h2 className="text-xl font-semibold text-[var(--of-text-strong)]">我什么时候能恢复？</h2>
+                  <p className="mt-2 text-sm leading-7 text-[var(--of-muted)]">
+                    时间只是参考。真正决定能不能进入下一阶段的是：组织愈合、疼痛和肿胀、影像/复查结果，以及活动度、肌力、步态和平衡是否达到要求。
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {["走路 / 负重", "脱拐 / 楼梯", "上班 / 日常", "跑步 / 运动"].map((item) => (
+                  <div key={item} className="rounded-2xl border border-[var(--of-border)] bg-[var(--of-surface-muted)] px-3 py-4 text-center text-sm font-medium text-[var(--of-text-strong)]">
+                    {item}
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 rounded-2xl border border-[var(--of-accent-border)] bg-[var(--of-accent-soft)] px-4 py-3 text-xs leading-6 text-[var(--of-muted)]">
+                后续患者端会把每个疾病的“走路、脱拐、上班、运动”做成具体功能回归卡：参考时间窗 + 解锁条件 + 延迟因素 + 需要复查的信号。
+              </div>
+            </section>
+          </div>
+
+          <section className="mt-5 rounded-[24px] border border-[var(--of-border)] bg-[var(--of-surface)] p-5">
+            <div className="text-sm font-semibold text-[var(--of-text-strong)]">想进一步看专业内容？</div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setAudience("clinician");
+                  setMode("study");
+                }}
+                className="rounded-xl bg-gradient-to-r from-[#20A6B9] to-[#4B8EE8] px-4 py-2.5 text-sm font-medium text-white"
+              >
+                看查体与影像学习
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAudience("clinician");
+                  setMode("procedure");
+                }}
+                className="rounded-xl border border-[var(--of-border)] bg-[var(--of-surface-muted)] px-4 py-2.5 text-sm font-medium text-[var(--of-text-strong)]"
+              >
+                看手术 Pro
+              </button>
+            </div>
+          </section>
+        </main>
+
+        <footer className="mx-auto max-w-5xl px-4 pb-8 pt-2 text-center text-[11px] leading-5 text-[var(--of-muted)] sm:px-6">
+          本页面用于健康教育和就诊前理解，不提供基于单张图片或片段信息的在线诊断，也不能替代线下专科查体与医生判断。
+        </footer>
+
+        <FeedbackHub
+          diseaseId={selectedDisease.id}
+          diseaseName={selectedDisease.name}
+          searchQuery=""
+          searchResultCount={0}
+        />
       </div>
     );
   }
@@ -455,8 +625,41 @@ export default function Home() {
           </h1>
 
           <p className="mt-5 max-w-2xl text-base leading-7 text-[var(--of-muted)] sm:text-lg">
-            不只是帮你完成工作，更重要的是帮助你在繁重的临床任务中，真正学会骨科。
+            {audience === "patient"
+              ? "看懂自己的病情、治疗选择和恢复进度。"
+              : "不只是帮你完成工作，更重要的是帮助你在繁重的临床任务中，真正学会骨科。"}
           </p>
+
+          <div className="mt-6 grid max-w-2xl gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => setAudience("patient")}
+              className={`rounded-2xl border p-4 text-left transition ${
+                audience === "patient"
+                  ? "border-[#7BC9D4] bg-[var(--of-accent-soft)] shadow-[0_12px_34px_rgba(32,166,185,.10)]"
+                  : "border-[var(--of-border)] bg-[var(--of-surface)] hover:border-[#A4D7DD]"
+              }`}
+            >
+              <div className="text-sm font-semibold text-[var(--of-text-strong)]">我是患者</div>
+              <div className="mt-1 text-xs leading-5 text-[var(--of-muted)]">
+                严重吗？要不要手术？什么时候能恢复？
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setAudience("clinician")}
+              className={`rounded-2xl border p-4 text-left transition ${
+                audience === "clinician"
+                  ? "border-[#7BC9D4] bg-[var(--of-accent-soft)] shadow-[0_12px_34px_rgba(32,166,185,.10)]"
+                  : "border-[var(--of-border)] bg-[var(--of-surface)] hover:border-[#A4D7DD]"
+              }`}
+            >
+              <div className="text-sm font-semibold text-[var(--of-text-strong)]">我是医生 / 医学生</div>
+              <div className="mt-1 text-xs leading-5 text-[var(--of-muted)]">
+                今天上班、系统学习、手术 Pro
+              </div>
+            </button>
+          </div>
 
           <div className="mt-8 rounded-[30px] border border-[#D2E1DE] bg-[var(--of-surface)] p-3 shadow-[0_22px_70px_rgba(39,76,79,.10)] backdrop-blur-2xl sm:p-4">
             <div className="relative flex items-center rounded-[22px] border border-[var(--of-border)] bg-[var(--of-surface-muted)] shadow-inner shadow-[#AFC6C2]/25 transition focus-within:border-[#8DCCD4] focus-within:ring-4 focus-within:ring-cyan-300/10">
@@ -484,7 +687,11 @@ export default function Home() {
                     handleOpenDisease(filteredDiseases[0], true);
                   }
                 }}
-                placeholder="搜索疾病、分型、查体、影像或手术方式..."
+                placeholder={
+                  audience === "patient"
+                    ? "搜索你的诊断，例如：腰椎间盘突出、踝关节骨折..."
+                    : "搜索疾病、分型、查体、影像或手术方式..."
+                }
                 className="h-16 min-w-0 flex-1 bg-transparent px-4 text-base text-[var(--of-text-strong)] outline-none placeholder:text-[var(--of-muted)] sm:text-lg"
                 autoComplete="off"
                 aria-label="搜索骨科疾病"
@@ -580,8 +787,8 @@ export default function Home() {
           <div className="mt-9 grid max-w-2xl grid-cols-3 gap-3">
             {[
               [String(diseaseList.length), "疾病主题"],
-              ["3", "工作 / 学习 / 手术"],
-              ["1", "条临床决策链"],
+              [audience === "patient" ? "3" : "3", audience === "patient" ? "患者核心问题" : "工作 / 学习 / 手术"],
+              ["1", audience === "patient" ? "条就医理解路径" : "条临床决策链"],
             ].map(([value, label]) => (
               <div
                 key={label}
