@@ -16,10 +16,10 @@ on:
         required: true
         type: boolean
         default: false
-  schedule:
-    # 每天 03:37（北京时间）自动扫描一次；避开整点更不容易拥堵。
-    - cron: "37 3 * * *"
-      timezone: "Asia/Shanghai"
+  # 第一轮先只手动盲测。确认 DeepSeek 输出质量后再开启 schedule。
+  # schedule:
+  #   - cron: "37 3 * * *"
+  #     timezone: "Asia/Shanghai"
 
 permissions:
   contents: read
@@ -35,8 +35,8 @@ jobs:
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
-      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      AUTOCURATOR_MODEL: gemini-3.7-flash
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      AUTOCURATOR_MODEL: deepseek-v4-flash
 
     steps:
       - name: Checkout

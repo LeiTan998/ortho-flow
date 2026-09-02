@@ -28,7 +28,7 @@ GOLD_PATH = ROOT / "autocurator" / "skills" / "gold_examples" / "TIBIAL_PLATEAU_
 SCHEMA_PATH = ROOT / "autocurator" / "schema" / "curator_response.schema.json"
 OUTPUT_DIR = ROOT / "autocurator_output"
 
-MODEL = os.getenv("AUTOCURATOR_MODEL", "gemini-3.7-flash")
+MODEL = os.getenv("AUTOCURATOR_MODEL", "deepseek-v4-flash")
 
 
 def need_env(name: str) -> str:
@@ -198,30 +198,81 @@ procedure.name 使用：PFNA 内固定术
 """.strip()
 
 
-def gemini_structured(prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
-    api_key = need_env("GEMINI_API_KEY")
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent"
+def deepseek_structured(prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
+    """Call DeepSeek in JSON mode, then let local jsonschema enforce the exact schema."""
+    api_key = need_env("DEEPSEEK_API_KEY")
+    url = "https://api.deepseek.com/chat/completions"
+
+    # DeepSeek JSON mode guarantees valid JSON, but it does not enforce our JSON Schema.
+    # Therefore the schema is included in the prompt and validated again locally.
+    schema_text = json.dumps(schema, ensure_ascii=False)
+    user_prompt = f"""{prompt}
+
+你必须只输出 JSON object，不要输出 Markdown 代码块或解释文字。
+最终 JSON 必须符合下面的 JSON Schema：
+{schema_text}
+"""
+
     body = {
-        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-        "generationConfig": {
-            "responseMimeType": "application/json",
-            "responseJsonSchema": schema,
-        },
+        "model": MODEL,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "你是 OrthoFlow Auto Curator。你必须输出严格 JSON。"
+                    "不要编造来源，不要把未经核验的医疗细节写成确定结论。"
+                ),
+            },
+            {"role": "user", "content": user_prompt},
+        ],
+        "response_format": {"type": "json_object"},
+        "thinking": {"type": "enabled"},
+        "temperature": 0.2,
+        "max_tokens": 24000,
     }
-    r = requests.post(
-        url,
-        headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
-        json=body,
-        timeout=180,
-    )
-    if r.status_code >= 400:
-        raise RuntimeError(f"Gemini API failed {r.status_code}: {r.text[:1600]}")
-    raw = r.json()
-    try:
-        text = raw["candidates"][0]["content"]["parts"][0]["text"]
-    except Exception as exc:
-        raise RuntimeError(f"Unexpected Gemini response: {json.dumps(raw, ensure_ascii=False)[:1800]}") from exc
-    return json.loads(text)
+
+    last_error: Exception | None = None
+    for attempt in range(3):
+        try:
+            r = requests.post(
+                url,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                    "User-Agent": "orthoflow-auto-curator/1.1",
+                },
+                json=body,
+                timeout=240,
+            )
+            if r.status_code >= 400:
+                raise RuntimeError(f"DeepSeek API failed {r.status_code}: {r.text[:1800]}")
+
+            raw = r.json()
+            try:
+                choice = raw["choices"][0]
+                text = choice["message"]["content"]
+                finish_reason = choice.get("finish_reason")
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Unexpected DeepSeek response: {json.dumps(raw, ensure_ascii=False)[:1800]}"
+                ) from exc
+
+            if finish_reason == "length":
+                raise RuntimeError("DeepSeek output was truncated (finish_reason=length).")
+            if not isinstance(text, str) or not text.strip():
+                raise RuntimeError("DeepSeek returned empty content in JSON mode.")
+
+            result = json.loads(text)
+            validate(instance=result, schema=schema)
+            return result
+        except (RuntimeError, json.JSONDecodeError, ValidationError) as exc:
+            last_error = exc
+            if attempt < 2:
+                print(f"DeepSeek structured output retry {attempt + 1}/2: {exc}", file=sys.stderr)
+                continue
+            raise RuntimeError(f"DeepSeek structured output failed after 3 attempts: {exc}") from exc
+
+    raise RuntimeError(f"DeepSeek structured output failed: {last_error}")
 
 
 def review_and_revise(first: dict[str, Any], disease: dict[str, Any], schema: dict[str, Any]) -> dict[str, Any]:
@@ -243,7 +294,7 @@ def review_and_revise(first: dict[str, Any], disease: dict[str, Any], schema: di
 - 不能确认的内容用谨慎措辞；
 - action=create_procedure 时 reviewStatus=draft、contentStatus=ai_draft。
 """.strip()
-    return gemini_structured(prompt, schema)
+    return deepseek_structured(prompt, schema)
 
 
 def normalize_and_validate(result: dict[str, Any], disease: dict[str, Any], schema: dict[str, Any]) -> dict[str, Any]:
@@ -348,7 +399,7 @@ def main() -> int:
         print(f"Model: {MODEL}")
 
         prompt = build_prompt(disease, args.mode, existing)
-        first = gemini_structured(prompt, schema)
+        first = deepseek_structured(prompt, schema)
         first = normalize_and_validate(first, disease, schema)
 
         result = first
