@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""OrthoFlow Auto Curator V1.
+"""OrthoFlow Auto Curator V2 Scheduler.
 
-- scan_one: scan Supabase and generate one missing concrete Procedure draft.
+- scan_one: scan multiple eligible diseases until one concrete Procedure draft is generated.
 - pfna_test: force-generate a PFNA draft for quality comparison, without using PFNA gold content.
 
 All AI output is a draft. Nothing is published automatically.
@@ -121,7 +121,12 @@ def pending_disease_ids() -> set[str]:
         raise
 
 
-def pick_missing_disease(diseases: list[dict[str, Any]], procedures: list[dict[str, Any]]) -> dict[str, Any] | None:
+def missing_disease_candidates(diseases: list[dict[str, Any]], procedures: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return eligible diseases in priority order.
+
+    A pending review item blocks the same disease on later runs, but within the
+    current run the scheduler can skip ambiguous diseases and keep searching.
+    """
     pending = pending_disease_ids()
     candidates = []
     for row in diseases:
@@ -133,7 +138,7 @@ def pick_missing_disease(diseases: list[dict[str, Any]], procedures: list[dict[s
             continue
         candidates.append(d)
     candidates.sort(key=lambda x: (-int(x.get("viewCount", 0)), x.get("name", "")))
-    return candidates[0] if candidates else None
+    return candidates
 
 
 def find_pfna_disease(diseases: list[dict[str, Any]]) -> dict[str, Any]:
@@ -305,7 +310,7 @@ def normalize_and_validate(result: dict[str, Any], disease: dict[str, Any], sche
         proc["reviewStatus"] = "draft"
         proc["contentStatus"] = "ai_draft"
         proc["engineVersion"] = "procedure-engine-v1"
-        proc["autoCuratorVersion"] = "auto-curator-v1"
+        proc["autoCuratorVersion"] = "auto-curator-v2-scheduler"
         proc["autoCuratorModel"] = MODEL
         proc["generatedAt"] = datetime.now(timezone.utc).isoformat()
         # Basic ID safety. Do not allow arbitrary punctuation in procedure IDs.
@@ -385,51 +390,77 @@ def main() -> int:
         procedures = sb_get("procedures", {"select": "id,data,is_published,updated_at"})
 
         if args.mode == "pfna_test":
-            disease = find_pfna_disease(diseases)
+            candidates = [find_pfna_disease(diseases)]
+            max_candidates = 1
         else:
-            disease = pick_missing_disease(diseases, procedures)
-            if not disease:
+            candidates = missing_disease_candidates(diseases, procedures)
+            max_candidates = int(os.getenv("AUTOCURATOR_MAX_CANDIDATES", "6"))
+            if not candidates:
                 print("No disease currently needs a concrete Procedure draft.")
                 log_run(args.mode, None, "nothing_to_do", {"message": "No eligible disease"})
                 return 0
 
-        existing = concrete_procedures_for(disease, procedures)
-        print(f"Target disease: {disease['name']} ({disease['id']})")
-        print(f"Existing concrete procedures: {existing or 'none'}")
-        print(f"Model: {MODEL}")
+        decisions: list[dict[str, Any]] = []
+        created = False
 
-        prompt = build_prompt(disease, args.mode, existing)
-        first = deepseek_structured(prompt, schema)
-        first = normalize_and_validate(first, disease, schema)
+        for disease in candidates[:max_candidates]:
+            existing = concrete_procedures_for(disease, procedures)
+            print(f"\nTarget disease: {disease['name']} ({disease['id']})")
+            print(f"Existing concrete procedures: {existing or 'none'}")
+            print(f"Model: {MODEL}")
 
-        result = first
-        if not args.no_review:
-            result = review_and_revise(first, disease, schema)
-            result = normalize_and_validate(result, disease, schema)
+            prompt = build_prompt(disease, args.mode, existing)
+            first = deepseek_structured(prompt, schema)
+            first = normalize_and_validate(first, disease, schema)
 
-        # PFNA blind-test id is forced after both passes so the reviewer cannot drift.
-        if args.mode == "pfna_test" and result.get("action") == "create_procedure":
-            result["procedure"]["id"] = "intertrochanteric_pfna_ai_test"
-            result["procedure"]["name"] = "PFNA 内固定术（AI盲测草稿）"
+            # Only spend the second AI pass on content that may become a Procedure.
+            # Ambiguous/no-procedure decisions are recorded and the scheduler moves on.
+            result = first
+            if first.get("action") == "create_procedure" and not args.no_review:
+                result = review_and_revise(first, disease, schema)
+                result = normalize_and_validate(result, disease, schema)
 
-        artifact = save_artifact(result, args.mode, disease)
-        print(f"Artifact: {artifact.relative_to(ROOT)}")
-        print(f"Action: {result['action']}")
-        print(f"Review flags: {len(result.get('reviewFlags') or [])}")
+            if args.mode == "pfna_test" and result.get("action") == "create_procedure":
+                result["procedure"]["id"] = "intertrochanteric_pfna_ai_test"
+                result["procedure"]["name"] = "PFNA 内固定术（AI盲测草稿）"
 
-        saved = None
-        if args.save_draft:
-            saved = save_draft(result, disease, args.mode)
-            print("Saved to Supabase auto_curator_drafts: YES")
-        else:
-            print("Saved to Supabase auto_curator_drafts: NO (test/dry-run)")
+            artifact = save_artifact(result, args.mode, disease)
+            action = result["action"]
+            print(f"Artifact: {artifact.relative_to(ROOT)}")
+            print(f"Action: {action}")
+            print(f"Review flags: {len(result.get('reviewFlags') or [])}")
 
-        log_run(args.mode, disease, "ok", {
-            "action": result["action"],
-            "artifact": str(artifact.relative_to(ROOT)),
+            if args.save_draft:
+                save_draft(result, disease, args.mode)
+                print("Saved to Supabase auto_curator_drafts: YES")
+            else:
+                print("Saved to Supabase auto_curator_drafts: NO (test/dry-run)")
+
+            decisions.append({
+                "diseaseId": disease["id"],
+                "diseaseName": disease["name"],
+                "action": action,
+                "artifact": str(artifact.relative_to(ROOT)),
+                "reviewFlags": len(result.get("reviewFlags") or []),
+            })
+
+            if action == "create_procedure":
+                created = True
+                break
+
+            if args.mode == "pfna_test":
+                break
+
+            print(f"Skip and continue: {action}")
+
+        outcome = "created_draft" if created else "review_queue_only"
+        log_run(args.mode, decisions and {"id": decisions[-1]["diseaseId"], "name": decisions[-1]["diseaseName"]} or None, outcome, {
+            "checked": len(decisions),
+            "created": created,
+            "decisions": decisions,
             "savedDraft": bool(args.save_draft),
-            "reviewFlags": len(result.get("reviewFlags") or []),
         })
+        print(f"\nScheduler summary: checked={len(decisions)}, created={created}")
         return 0
 
     except ValidationError as exc:

@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "先用 pfna_test 做盲测；稳定后再用 scan_one"
+        description: "pfna_test=盲测；scan_one=连续扫描直到生成1个可审核Procedure"
         required: true
         type: choice
         default: pfna_test
@@ -37,6 +37,7 @@ jobs:
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
       DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
       AUTOCURATOR_MODEL: deepseek-v4-flash
+      AUTOCURATOR_MAX_CANDIDATES: "6"
 
     steps:
       - name: Checkout
