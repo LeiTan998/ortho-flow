@@ -1,10 +1,18 @@
 #!/usr/bin/env python3
-"""OrthoFlow Auto Curator V2 Scheduler.
+"""OrthoFlow Auto Curator V3 Content Engine.
 
-- scan_one: scan multiple eligible diseases until one concrete Procedure draft is generated.
-- pfna_test: force-generate a PFNA draft for quality comparison, without using PFNA gold content.
+V3 expands the scheduler from Procedure-only drafting to three draft types:
+- patient_guide
+- rehab_contract
+- procedure
 
-All AI output is a draft. Nothing is published automatically.
+Principles:
+- process the entire existing disease library; viewCount is NOT used for priority;
+- build in phases: all Patient Guides -> all Rehab Contracts -> all Procedures;
+- each run handles a small batch so failures/cost are easy to control;
+- never auto-publish;
+- ambiguous/not-applicable tasks are recorded so they are not repeatedly regenerated;
+- Procedure generation adapts to procedure category and may leave non-applicable fields empty.
 """
 
 from __future__ import annotations
@@ -24,11 +32,16 @@ from jsonschema.exceptions import ValidationError
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILL_PATH = ROOT / "autocurator" / "skills" / "ORTHOFLOW_AUTOCURATOR_SKILL_V1.md"
-GOLD_PATH = ROOT / "autocurator" / "skills" / "gold_examples" / "TIBIAL_PLATEAU_ORIF_GOLD_STRUCTURE.json"
-SCHEMA_PATH = ROOT / "autocurator" / "schema" / "curator_response.schema.json"
+SCHEMA_PATH = ROOT / "autocurator" / "schema" / "content_engine_response.schema.json"
 OUTPUT_DIR = ROOT / "autocurator_output"
 
 MODEL = os.getenv("AUTOCURATOR_MODEL", "deepseek-v4-flash")
+CONTENT_PRIORITY = {"patient_guide": 0, "rehab_contract": 1, "procedure": 2}
+CREATE_ACTION = {
+    "patient_guide": "create_patient_guide",
+    "rehab_contract": "create_rehab_contract",
+    "procedure": "create_procedure",
+}
 
 
 def need_env(name: str) -> str:
@@ -39,11 +52,10 @@ def need_env(name: str) -> str:
 
 
 def supabase_headers() -> dict[str, str]:
-    # New Supabase sb_secret_* keys should be sent in the apikey header, not as Bearer JWT.
     return {
         "apikey": need_env("SUPABASE_SECRET_KEY"),
         "Content-Type": "application/json",
-        "User-Agent": "orthoflow-auto-curator/1.0",
+        "User-Agent": "orthoflow-auto-curator/3.0",
     }
 
 
@@ -51,7 +63,7 @@ def sb_get(path: str, params: dict[str, Any] | None = None) -> Any:
     url = need_env("SUPABASE_URL").rstrip("/") + "/rest/v1/" + path.lstrip("/")
     r = requests.get(url, headers=supabase_headers(), params=params, timeout=45)
     if r.status_code >= 400:
-        raise RuntimeError(f"Supabase GET failed {r.status_code}: {r.text[:1000]}")
+        raise RuntimeError(f"Supabase GET failed {r.status_code}: {r.text[:1200]}")
     return r.json()
 
 
@@ -61,7 +73,7 @@ def sb_post(path: str, payload: Any, prefer: str = "return=representation") -> A
     headers["Prefer"] = prefer
     r = requests.post(url, headers=headers, json=payload, timeout=45)
     if r.status_code >= 400:
-        raise RuntimeError(f"Supabase POST failed {r.status_code}: {r.text[:1200]}")
+        raise RuntimeError(f"Supabase POST failed {r.status_code}: {r.text[:1600]}")
     if not r.text.strip():
         return None
     return r.json()
@@ -71,15 +83,23 @@ def load_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def sanitize_disease(row: dict[str, Any]) -> dict[str, Any]:
-    data = row.get("data") or {}
+def disease_from_row(row: dict[str, Any]) -> dict[str, Any]:
+    data = dict(row.get("data") or {})
+    if not data.get("id") and row.get("id"):
+        data["id"] = row["id"]
+    data["viewCount"] = int(row.get("view_count") or data.get("viewCount") or 0)
+    return data
+
+
+def compact_disease(disease: dict[str, Any]) -> dict[str, Any]:
     keep = {
         "id", "name", "englishName", "searchKeywords", "learningSummary",
         "imagingGuide", "classifications", "surgeryTable", "decisionFlow",
-        "rehabPlan", "procedureRefs"
+        "rehabPlan", "procedureRefs", "patientGuide", "rehabContract",
+        "redFlags", "treatment", "followUp"
     }
-    clean = {k: data.get(k) for k in keep if k in data}
-    clean["viewCount"] = int(row.get("view_count") or data.get("viewCount") or 0)
+    clean = {k: disease.get(k) for k in keep if k in disease}
+    clean["viewCount"] = int(disease.get("viewCount") or 0)
     return clean
 
 
@@ -92,27 +112,54 @@ def is_placeholder(proc_id: str, disease_id: str) -> bool:
     return proc_id == f"{disease_id}_surgery_pro" or proc_id.endswith("_surgery_pro")
 
 
-def concrete_procedures_for(disease: dict[str, Any], procedures: list[dict[str, Any]]) -> list[str]:
+def related_procedures(disease_id: str, procedures: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [p for p in procedures if procedure_related_to(p, disease_id)]
+
+
+def concrete_procedure_ids(disease: dict[str, Any], procedures: list[dict[str, Any]]) -> list[str]:
     did = disease.get("id", "")
     ids: set[str] = set()
     for ref in disease.get("procedureRefs") or []:
-        pid = (ref or {}).get("id", "")
+        if not isinstance(ref, dict):
+            continue
+        pid = ref.get("id", "")
         if pid and not is_placeholder(pid, did):
             ids.add(pid)
-    for proc in procedures:
+    for proc in related_procedures(did, procedures):
         pid = proc.get("id", "")
-        if pid and procedure_related_to(proc, did) and not is_placeholder(pid, did):
+        if pid and not is_placeholder(pid, did):
             ids.add(pid)
     return sorted(ids)
 
 
-def pending_disease_ids() -> set[str]:
+def has_patient_guide(disease: dict[str, Any]) -> bool:
+    guide = disease.get("patientGuide")
+    return isinstance(guide, dict) and bool(guide)
+
+
+def has_rehab_contract(disease: dict[str, Any], procedures: list[dict[str, Any]]) -> bool:
+    contract = disease.get("rehabContract")
+    if isinstance(contract, dict) and bool(contract):
+        return True
+    for proc in related_procedures(disease.get("id", ""), procedures):
+        pdata = proc.get("data") or {}
+        contract = pdata.get("rehabContract")
+        if isinstance(contract, dict) and bool(contract):
+            return True
+    return False
+
+
+def pending_pairs() -> set[tuple[str, str]]:
+    """Return (disease_id, content_type) for V3 pending drafts.
+
+    Old V1/V2 Procedure rows do not block Patient/Rehab generation.
+    V3 uses generation_mode=v3_<content_type>.
+    """
     try:
         rows = sb_get("auto_curator_drafts", {
-            "select": "disease_id,status",
+            "select": "disease_id,generation_mode,status",
             "status": "eq.pending_review",
         })
-        return {r["disease_id"] for r in rows}
     except RuntimeError as exc:
         if "auto_curator_drafts" in str(exc):
             raise RuntimeError(
@@ -120,96 +167,200 @@ def pending_disease_ids() -> set[str]:
             ) from exc
         raise
 
+    pairs: set[tuple[str, str]] = set()
+    for row in rows:
+        did = row.get("disease_id")
+        mode = row.get("generation_mode") or ""
+        if not did:
+            continue
+        for content_type in CONTENT_PRIORITY:
+            if mode == f"v3_{content_type}":
+                pairs.add((did, content_type))
+    return pairs
 
-def missing_disease_candidates(diseases: list[dict[str, Any]], procedures: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Return eligible diseases in priority order.
 
-    A pending review item blocks the same disease on later runs, but within the
-    current run the scheduler can skip ambiguous diseases and keep searching.
+def task_candidates(diseases: list[dict[str, Any]], procedures: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Build all missing-content tasks without using traffic/viewCount priority.
+
+    Stable ordering is by content phase, then disease name/id. Pending-review rows count
+    as already generated for scheduling purposes so repeated runs do not duplicate drafts.
     """
-    pending = pending_disease_ids()
-    candidates = []
+    pending = pending_pairs()
+    tasks: list[dict[str, Any]] = []
+
     for row in diseases:
-        d = sanitize_disease(row)
+        d = disease_from_row(row)
         did = d.get("id")
-        if not did or not d.get("name") or did in pending:
+        if not did or not d.get("name"):
             continue
-        if concrete_procedures_for(d, procedures):
-            continue
-        candidates.append(d)
-    candidates.sort(key=lambda x: (-int(x.get("viewCount", 0)), x.get("name", "")))
-    return candidates
+
+        missing: list[str] = []
+        if not has_patient_guide(d):
+            missing.append("patient_guide")
+        if not has_rehab_contract(d, procedures):
+            missing.append("rehab_contract")
+        if not concrete_procedure_ids(d, procedures):
+            missing.append("procedure")
+
+        for content_type in missing:
+            if (did, content_type) in pending:
+                continue
+            tasks.append({
+                "disease": compact_disease(d),
+                "contentType": content_type,
+                # Kept only for logs/backward compatibility; never used for ordering.
+                "viewCount": int(d.get("viewCount") or 0),
+            })
+
+    tasks.sort(key=lambda t: (
+        CONTENT_PRIORITY[t["contentType"]],
+        t["disease"].get("name", ""),
+        t["disease"].get("id", ""),
+    ))
+    return tasks
+
+
+def select_phase_tasks(all_tasks: list[dict[str, Any]], mode: str) -> tuple[str | None, list[dict[str, Any]]]:
+    """Select one phase for a run.
+
+    content_scan always finishes the whole Patient Guide phase first, then Rehab,
+    then Procedure. Explicit *_scan modes only run their requested phase.
+    """
+    explicit = {
+        "patient_scan": "patient_guide",
+        "rehab_scan": "rehab_contract",
+        "procedure_scan": "procedure",
+    }.get(mode)
+
+    if explicit:
+        return explicit, [t for t in all_tasks if t["contentType"] == explicit]
+
+    for content_type in ("patient_guide", "rehab_contract", "procedure"):
+        phase_tasks = [t for t in all_tasks if t["contentType"] == content_type]
+        if phase_tasks:
+            return content_type, phase_tasks
+
+    return None, []
 
 
 def find_pfna_disease(diseases: list[dict[str, Any]]) -> dict[str, Any]:
     needles = ["股骨转子间", "股骨粗隆间", "intertrochanteric", "pertrochanteric"]
     for row in diseases:
-        d = sanitize_disease(row)
+        d = disease_from_row(row)
         hay = " ".join(str(d.get(k, "")) for k in ("id", "name", "englishName", "searchKeywords")).lower()
         if any(n.lower() in hay for n in needles):
-            return d
+            return compact_disease(d)
     raise RuntimeError("PFNA test: could not find intertrochanteric/pertrochanteric fracture disease.")
 
 
-def build_prompt(disease: dict[str, Any], mode: str, existing: list[str]) -> str:
+def common_rules(disease: dict[str, Any], content_type: str) -> str:
+    return f"""
+当前疾病：{disease.get('name')} / {disease.get('englishName')}
+疾病 id：{disease.get('id')}
+本次 contentType：{content_type}
+
+通用硬规则：
+1. 只输出符合 JSON Schema 的 JSON object，不要 Markdown。
+2. 所有输出都是待人工审核草稿；不得宣称已经完成文献核验。
+3. 不编造来源、PMID、DOI、URL、指南名称或品牌 IFU 细节。
+4. 精确毫米/角度/深度、固定周数、绝对的“必须/禁止”、设备特异动作放入 reviewFlags，除非只是明确标注“需按本院/厂商规范核对”。
+5. 不把分型直接等同于术式；不把某一个影像表现自动等同于必须手术。
+6. 康复优先使用“时间 + 组织/固定稳定性 + 症状 + 功能 + 风险”的条件解锁，不写成到了某周自动开放。
+7. 内容面向教育和就诊理解，不能替代患者个体化诊断、查体、完整影像和线下医生判断。
+""".strip()
+
+
+def build_patient_prompt(disease: dict[str, Any]) -> str:
+    return f"""
+你是 OrthoFlow 患者端内容编辑器。目标不是写百科，而是回答患者最常问的三件事：
+“严重吗？”“要手术吗？”“什么时候能恢复？”
+
+{common_rules(disease, 'patient_guide')}
+
+现有疾病资料（只能作为背景，不要照抄绝对化旧句）：
+{json.dumps(disease, ensure_ascii=False, indent=2)}
+
+写作要求：
+- 语言让普通患者能看懂，但不要幼稚化。
+- severity：解释医生真正看哪些维度；把“相对简单/更复杂”写成条件，不写成诊断结论。
+- surgeryDecision：强调症状、稳定性、功能需求、完整影像、软组织/神经血管等共同决定；不能输出“某分型=某手术”。
+- recovery：至少覆盖日常走路/负重或活动、脱拐或辅助器具、工作、运动回归等适合该病的里程碑；若某项不适用可换成更相关活动。
+- redFlags：只列需要及时就医/复诊的通用危险信号，不制造恐慌。
+- visitPrep：告诉患者复诊时应该带什么、问什么。
+- action 应为 create_patient_guide；只有疾病概念本身明显不适合患者三问结构时才用 not_applicable。
+- patientGuide.reviewStatus=draft，contentStatus=ai_draft。
+""".strip()
+
+
+def build_rehab_prompt(disease: dict[str, Any]) -> str:
+    return f"""
+你是 OrthoFlow 康复内容编辑器。你的任务是生成“功能回归 / Return to Activity”草稿，而不是固定时间表。
+
+{common_rules(disease, 'rehab_contract')}
+
+现有疾病资料：
+{json.dumps(disease, ensure_ascii=False, indent=2)}
+
+必须使用五把锁，且 id 固定为：time, tissue, symptoms, function, risk。
+五把锁分别表达：时间窗口、组织/固定或生物学条件、疼痛肿胀等症状、力量/活动度/控制等功能、再受伤/并发症/跌倒等风险。
+
+activities：
+- 至少 6 项，优先覆盖该疾病患者真正会问的日常活动、工作和运动。
+- typicalWindow 只允许写“常见阶段/大致窗口/需结合术式或固定方式”，不要把周数当作自动通行证。
+- unlockWhen 必须写可观察条件；holdIf 写暂停升级的信号。
+- 如果该疾病几乎没有可定义的康复/活动回归路径，action=not_applicable，说明原因，不要硬填。
+- rehabContract.reviewStatus=draft，contentStatus=ai_draft。
+""".strip()
+
+
+def build_procedure_prompt(disease: dict[str, Any], existing: list[str], pfna_test: bool = False) -> str:
     skill = SKILL_PATH.read_text(encoding="utf-8")
-    gold = GOLD_PATH.read_text(encoding="utf-8")
     special = ""
-    if mode == "pfna_test":
+    if pfna_test:
         special = """
-### 本次盲测任务
-请为该疾病独立生成 **PFNA / Proximal Femoral Nail Antirotation** Procedure 草稿。
-这是质量对比测试：你没有得到任何 PFNA Gold Example，因此不要提及或猜测人工 PFNA 模板内容。
-procedure.id 固定使用：intertrochanteric_pfna_ai_test
-procedure.name 使用：PFNA 内固定术
+本次为 PFNA 盲测：独立生成 PFNA / Proximal Femoral Nail Antirotation 草稿。
+procedure.id 固定 intertrochanteric_pfna_ai_test，procedure.name 使用 PFNA 内固定术。
 """
     else:
         special = """
-### 本次自动补全任务
-判断该疾病是否应建立一个具体 Procedure。
-若适合，从临床常见性与规培学习价值出发，只选择 1 个最基础、最值得优先建立的具体手术。
-若无法安全选择，返回 needs_human_selection；若该病通常不应为了页面而强行建立手术，返回 no_procedure_recommended。
+先判断能否从该疾病安全选择一个“最基础、最常见、最值得规培优先建立”的具体 Procedure。
+若存在多个差异明显且不能从疾病数据安全选择的手术路径，action=needs_human_selection，并说明候选路径；不要硬选。
+若该疾病通常不应为了页面完整而强行建立手术，action=not_applicable。
 """
 
     return f"""
-你是 OrthoFlow Auto Curator。严格执行以下 Skill。
+你是 OrthoFlow Procedure Pro 内容编辑器。
 
-===== SKILL =====
+===== Procedure Skill =====
 {skill}
-===== END SKILL =====
+===== End Skill =====
 
-下面是一个不同疾病的 Gold Example。它只用于学习 JSON 结构、文字粒度和安全措辞；
-严禁复制其中任何具体解剖、入路、器械或复位事实到本疾病。
+{common_rules(disease, 'procedure')}
 
-===== GOLD STRUCTURE EXAMPLE =====
-{gold}
-===== END GOLD =====
-
-当前疾病数据：
+当前疾病资料：
 {json.dumps(disease, ensure_ascii=False, indent=2)}
 
-当前已知具体 Procedures：
-{json.dumps(existing, ensure_ascii=False)}
+当前已知具体 Procedure：{json.dumps(existing, ensure_ascii=False)}
 
 {special}
 
-额外硬规则：
-1. 输出必须符合给定 JSON Schema。
-2. action=create_procedure 时，procedure.relatedDiseaseIds 必须只包含当前疾病 id：{disease.get('id')}。
-3. reviewStatus 必须为 draft；contentStatus 必须为 ai_draft。
-4. 不能联网核验的精确阈值、固定周数、指南级强结论不要装作已核验；放到 reviewFlags。
-5. 不编造来源、PMID、DOI、URL。
-6. 不写患者个体信息。
+Procedure V3 额外规则：
+1. 先给 procedureCategory 分类：fracture_fixation / arthroscopy / arthroplasty / spine / soft_tissue_repair / decompression / other。
+2. 不再为了填模板强行写内容。某字段不适用时，允许返回空数组，并把字段名放入 notApplicableFields。
+3. fracture_fixation：重点是复位、固定、透视/影像检查、内固定器械与失效模式。
+4. arthroscopy：重点是体位、portal/入路、镜下解剖与危险结构、病灶评估、修复/处理步骤、镜下终末检查；C 臂通常不是核心时 cArm=[]。
+5. arthroplasty：重点是暴露、软组织保护、骨性处理、假体定位/稳定性、肢体长度或力线、术后影像。
+6. spine：重点是定位、减压/固定目标、神经结构风险、影像定位与神经功能检查；具体器械动作需谨慎。
+7. soft_tissue_repair：重点是损伤模式、组织质量、张力/固定策略、保护期与功能恢复；不要生搬骨折复位模板。
+8. imagingChecklist.intraop 的“view”可以是镜下终末检查/直接视野/透视体位等真正适用于该术式的检查，不强制 X 线。
+9. action=create_procedure 时 relatedDiseaseIds 只能包含当前疾病 id：{disease.get('id')}。
+10. reviewStatus=draft，contentStatus=ai_draft。
 """.strip()
 
 
 def deepseek_structured(prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
-    """Call DeepSeek in JSON mode, then let local jsonschema enforce the exact schema."""
     api_key = need_env("DEEPSEEK_API_KEY")
     url = "https://api.deepseek.com/chat/completions"
-
-    # DeepSeek JSON mode guarantees valid JSON, but it does not enforce our JSON Schema.
-    # Therefore the schema is included in the prompt and validated again locally.
     schema_text = json.dumps(schema, ensure_ascii=False)
     user_prompt = f"""{prompt}
 
@@ -224,7 +375,7 @@ def deepseek_structured(prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
             {
                 "role": "system",
                 "content": (
-                    "你是 OrthoFlow Auto Curator。你必须输出严格 JSON。"
+                    "你是 OrthoFlow Auto Curator V3。你必须输出严格 JSON。"
                     "不要编造来源，不要把未经核验的医疗细节写成确定结论。"
                 ),
             },
@@ -232,7 +383,7 @@ def deepseek_structured(prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
         ],
         "response_format": {"type": "json_object"},
         "thinking": {"type": "enabled"},
-        "temperature": 0.2,
+        "temperature": 0.15,
         "max_tokens": 24000,
     }
 
@@ -244,7 +395,7 @@ def deepseek_structured(prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
                 headers={
                     "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json",
-                    "User-Agent": "orthoflow-auto-curator/1.1",
+                    "User-Agent": "orthoflow-auto-curator/3.0",
                 },
                 json=body,
                 timeout=240,
@@ -280,66 +431,119 @@ def deepseek_structured(prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
     raise RuntimeError(f"DeepSeek structured output failed: {last_error}")
 
 
-def review_and_revise(first: dict[str, Any], disease: dict[str, Any], schema: dict[str, Any]) -> dict[str, Any]:
-    # A second independent pass improves consistency without pretending to be evidence verification.
+def review_and_revise(first: dict[str, Any], disease: dict[str, Any], content_type: str, schema: dict[str, Any]) -> dict[str, Any]:
+    if content_type == "patient_guide":
+        focus = """
+重点检查：是否把影像截图当成最终诊断；是否把分型直接等同手术；是否制造焦虑；是否给了过度确定的恢复周数；普通患者是否能理解。
+"""
+    elif content_type == "rehab_contract":
+        focus = """
+重点检查：是否真的使用五把锁；是否把到了某周自动解锁；是否忽略疼痛肿胀、影像/组织愈合、力量控制与风险；活动项目是否与疾病相关。
+"""
+    else:
+        focus = """
+重点检查：procedureCategory 是否合理；是否为了填模板硬写 C 臂/复位/器械；危险解剖、精确阈值、品牌特异动作、固定负重周数是否需要 high reviewFlag；术式是否可能本应 needs_human_selection。
+"""
+
     prompt = f"""
-你是 OrthoFlow Auto Curator 的第二遍医学结构审稿器。
-你不能联网检索，因此你的任务不是宣称证据已核验，而是发现明显遗漏、内部矛盾、过度精确和危险的强结论。
+你是 OrthoFlow Auto Curator V3 的第二遍医学结构审稿器。你不能联网，因此不是证据核验器。
 
 疾病：{disease.get('name')} / {disease.get('englishName')}
+contentType：{content_type}
 
 第一遍草稿：
 {json.dumps(first, ensure_ascii=False, indent=2)}
 
-请返回同一个 Curator JSON 结构，并完成以下工作：
-- 保留合理内容；
-- 修正明显结构错误或内部矛盾；
-- 对危险解剖、具体阈值、固定时间、品牌特异器械动作增加 high reviewFlag；
+{focus}
+
+要求：
+- 保留合理内容，修正明显结构错误和内部矛盾；
+- 对不能确认的具体阈值、固定时间、强结论、危险操作增加 reviewFlags；
 - 不新增虚构来源；
-- 不能确认的内容用谨慎措辞；
-- action=create_procedure 时 reviewStatus=draft、contentStatus=ai_draft。
+- 保持 contentType 不变；
+- 若第一遍本来就不适用/需人工选择，可以保留该 action；
+- create_* 时对应 payload.reviewStatus=draft、contentStatus=ai_draft。
 """.strip()
     return deepseek_structured(prompt, schema)
 
 
-def normalize_and_validate(result: dict[str, Any], disease: dict[str, Any], schema: dict[str, Any]) -> dict[str, Any]:
+def normalize_and_validate(result: dict[str, Any], disease: dict[str, Any], content_type: str, schema: dict[str, Any]) -> dict[str, Any]:
     validate(instance=result, schema=schema)
-    if result.get("action") == "create_procedure":
-        proc = result["procedure"]
-        proc["relatedDiseaseIds"] = [disease["id"]]
-        proc["reviewStatus"] = "draft"
-        proc["contentStatus"] = "ai_draft"
-        proc["engineVersion"] = "procedure-engine-v1"
-        proc["autoCuratorVersion"] = "auto-curator-v2-scheduler"
-        proc["autoCuratorModel"] = MODEL
-        proc["generatedAt"] = datetime.now(timezone.utc).isoformat()
-        # Basic ID safety. Do not allow arbitrary punctuation in procedure IDs.
-        if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", proc.get("id", "")):
-            raise RuntimeError(f"Unsafe procedure id returned by model: {proc.get('id')}")
+    if result.get("contentType") != content_type:
+        raise RuntimeError(f"Model returned wrong contentType: {result.get('contentType')} != {content_type}")
+
+    expected_create = CREATE_ACTION[content_type]
+    action = result.get("action")
+    if action.startswith("create_") and action != expected_create:
+        raise RuntimeError(f"Model returned mismatched create action: {action} for {content_type}")
+
+    payload_key = {
+        "patient_guide": "patientGuide",
+        "rehab_contract": "rehabContract",
+        "procedure": "procedure",
+    }[content_type]
+
+    if action == expected_create:
+        payload = result[payload_key]
+        payload["reviewStatus"] = "draft"
+        payload["contentStatus"] = "ai_draft"
+        payload["autoCuratorVersion"] = "auto-curator-v3-content-engine"
+        payload["autoCuratorModel"] = MODEL
+        payload["generatedAt"] = datetime.now(timezone.utc).isoformat()
+
+        if content_type == "procedure":
+            payload["relatedDiseaseIds"] = [disease["id"]]
+            payload["engineVersion"] = "procedure-engine-v1"
+            pid = payload.get("id", "")
+            if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", pid):
+                raise RuntimeError(f"Unsafe procedure id returned by model: {pid}")
+
     return result
 
 
-def save_artifact(result: dict[str, Any], mode: str, disease: dict[str, Any]) -> Path:
+def build_prompt(content_type: str, disease: dict[str, Any], procedures: list[dict[str, Any]], pfna_test: bool = False) -> str:
+    if content_type == "patient_guide":
+        return build_patient_prompt(disease)
+    if content_type == "rehab_contract":
+        return build_rehab_prompt(disease)
+    if content_type == "procedure":
+        return build_procedure_prompt(disease, concrete_procedure_ids(disease, procedures), pfna_test=pfna_test)
+    raise RuntimeError(f"Unknown content type: {content_type}")
+
+
+def payload_for(result: dict[str, Any], content_type: str) -> dict[str, Any] | None:
+    key = {
+        "patient_guide": "patientGuide",
+        "rehab_contract": "rehabContract",
+        "procedure": "procedure",
+    }[content_type]
+    if result.get("action") == CREATE_ACTION[content_type]:
+        return result.get(key)
+    return None
+
+
+def save_artifact(result: dict[str, Any], disease: dict[str, Any], content_type: str) -> Path:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    p = OUTPUT_DIR / f"{mode}_{disease['id']}_{stamp}.json"
+    p = OUTPUT_DIR / f"v3_{content_type}_{disease['id']}_{stamp}.json"
     p.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     return p
 
 
-def save_draft(result: dict[str, Any], disease: dict[str, Any], mode: str) -> Any:
+def save_draft(result: dict[str, Any], disease: dict[str, Any], content_type: str) -> Any:
+    payload = payload_for(result, content_type)
     proc = result.get("procedure") or {}
     row = {
         "disease_id": disease["id"],
         "disease_name": disease["name"],
-        "candidate_procedure_id": proc.get("id"),
-        "candidate_procedure_name": proc.get("name"),
+        "candidate_procedure_id": proc.get("id") if content_type == "procedure" else None,
+        "candidate_procedure_name": proc.get("name") if content_type == "procedure" else None,
         "action": result["action"],
         "reason": result.get("reason"),
-        "payload": proc if result["action"] == "create_procedure" else None,
+        "payload": payload,
         "review_flags": result.get("reviewFlags") or [],
         "model": MODEL,
-        "generation_mode": mode,
+        "generation_mode": f"v3_{content_type}",
         "status": "pending_review",
     }
     return sb_post("auto_curator_drafts", row)
@@ -362,18 +566,38 @@ def log_run(mode: str, disease: dict[str, Any] | None, outcome: str, detail: dic
 def self_test() -> None:
     schema = load_json(SCHEMA_PATH)
     assert schema["type"] == "object"
-    assert SKILL_PATH.exists() and GOLD_PATH.exists()
-    fake = {"id": "fake", "name": "测试病", "procedureRefs": [], "viewCount": 0}
-    assert concrete_procedures_for(fake, []) == []
+    assert SKILL_PATH.exists()
+    fake_disease = {"id": "fake", "name": "测试病", "procedureRefs": [], "viewCount": 10}
+    assert concrete_procedure_ids(fake_disease, []) == []
+    assert not has_patient_guide(fake_disease)
+    assert not has_rehab_contract(fake_disease, [])
     assert is_placeholder("fake_surgery_pro", "fake")
-    print("SELF TEST OK")
+    phase, phase_tasks = select_phase_tasks([
+        {"disease": {"id": "b", "name": "乙"}, "contentType": "rehab_contract", "viewCount": 999},
+        {"disease": {"id": "a", "name": "甲"}, "contentType": "patient_guide", "viewCount": 0},
+    ], "content_scan")
+    assert phase == "patient_guide" and len(phase_tasks) == 1
+
+    # Schema sanity: minimal non-create decisions for every content type.
+    for ctype in CONTENT_PRIORITY:
+        validate(instance={
+            "contentType": ctype,
+            "action": "not_applicable",
+            "reason": "self test",
+            "reviewFlags": [],
+        }, schema=schema)
+    print("SELF TEST OK — V3 content engine")
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", choices=["scan_one", "pfna_test"], default="scan_one")
-    parser.add_argument("--save-draft", action="store_true", help="save result into auto_curator_drafts")
-    parser.add_argument("--no-review", action="store_true", help="skip second AI review pass")
+    parser.add_argument(
+        "--mode",
+        choices=["content_scan", "patient_scan", "rehab_scan", "procedure_scan", "pfna_test"],
+        default="content_scan",
+    )
+    parser.add_argument("--save-draft", action="store_true")
+    parser.add_argument("--no-review", action="store_true")
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args()
 
@@ -384,83 +608,95 @@ def main() -> int:
     schema = load_json(SCHEMA_PATH)
     try:
         try:
-            diseases = sb_get("diseases", {"select": "data,view_count"})
+            diseases = sb_get("diseases", {"select": "id,data,view_count"})
         except RuntimeError:
             diseases = sb_get("diseases", {"select": "data"})
         procedures = sb_get("procedures", {"select": "id,data,is_published,updated_at"})
 
         if args.mode == "pfna_test":
-            candidates = [find_pfna_disease(diseases)]
-            max_candidates = 1
+            disease = find_pfna_disease(diseases)
+            tasks = [{"disease": disease, "contentType": "procedure", "viewCount": disease.get("viewCount", 0), "pfnaTest": True}]
+            max_tasks = 1
         else:
-            candidates = missing_disease_candidates(diseases, procedures)
-            max_candidates = int(os.getenv("AUTOCURATOR_MAX_CANDIDATES", "6"))
-            if not candidates:
-                print("No disease currently needs a concrete Procedure draft.")
-                log_run(args.mode, None, "nothing_to_do", {"message": "No eligible disease"})
-                return 0
+            all_tasks = task_candidates(diseases, procedures)
+            phase, tasks = select_phase_tasks(all_tasks, args.mode)
+            max_tasks = int(os.getenv("AUTOCURATOR_MAX_TASKS", "5"))
+            if phase:
+                print(f"Active V3 phase: {phase}")
+                print(f"Remaining eligible tasks in phase: {len(tasks)}")
+
+        if not tasks:
+            print("No eligible V3 content gap found.")
+            log_run(args.mode, None, "nothing_to_do", {"message": "No eligible V3 task"})
+            return 0
 
         decisions: list[dict[str, Any]] = []
         created = False
+        last_disease: dict[str, Any] | None = None
 
-        for disease in candidates[:max_candidates]:
-            existing = concrete_procedures_for(disease, procedures)
-            print(f"\nTarget disease: {disease['name']} ({disease['id']})")
-            print(f"Existing concrete procedures: {existing or 'none'}")
+        for task in tasks[:max_tasks]:
+            disease = task["disease"]
+            content_type = task["contentType"]
+            last_disease = disease
+            print("\n============================================================")
+            print(f"Target disease: {disease['name']} ({disease['id']})")
+            print(f"Content type: {content_type}")
+            print(f"View count: {task.get('viewCount', 0)}")
             print(f"Model: {MODEL}")
+            if content_type == "procedure":
+                print(f"Existing concrete procedures: {concrete_procedure_ids(disease, procedures) or 'none'}")
 
-            prompt = build_prompt(disease, args.mode, existing)
+            prompt = build_prompt(content_type, disease, procedures, pfna_test=bool(task.get("pfnaTest")))
             first = deepseek_structured(prompt, schema)
-            first = normalize_and_validate(first, disease, schema)
+            first = normalize_and_validate(first, disease, content_type, schema)
 
-            # Only spend the second AI pass on content that may become a Procedure.
-            # Ambiguous/no-procedure decisions are recorded and the scheduler moves on.
             result = first
-            if first.get("action") == "create_procedure" and not args.no_review:
-                result = review_and_revise(first, disease, schema)
-                result = normalize_and_validate(result, disease, schema)
+            # Second pass only for drafts that may become actual content.
+            if first.get("action") == CREATE_ACTION[content_type] and not args.no_review:
+                result = review_and_revise(first, disease, content_type, schema)
+                result = normalize_and_validate(result, disease, content_type, schema)
 
             if args.mode == "pfna_test" and result.get("action") == "create_procedure":
                 result["procedure"]["id"] = "intertrochanteric_pfna_ai_test"
                 result["procedure"]["name"] = "PFNA 内固定术（AI盲测草稿）"
 
-            artifact = save_artifact(result, args.mode, disease)
+            artifact = save_artifact(result, disease, content_type)
             action = result["action"]
             print(f"Artifact: {artifact.relative_to(ROOT)}")
             print(f"Action: {action}")
             print(f"Review flags: {len(result.get('reviewFlags') or [])}")
 
             if args.save_draft:
-                save_draft(result, disease, args.mode)
+                save_draft(result, disease, content_type)
                 print("Saved to Supabase auto_curator_drafts: YES")
             else:
-                print("Saved to Supabase auto_curator_drafts: NO (test/dry-run)")
+                print("Saved to Supabase auto_curator_drafts: NO (dry-run)")
 
             decisions.append({
                 "diseaseId": disease["id"],
                 "diseaseName": disease["name"],
+                "contentType": content_type,
                 "action": action,
                 "artifact": str(artifact.relative_to(ROOT)),
                 "reviewFlags": len(result.get("reviewFlags") or []),
             })
 
-            if action == "create_procedure":
+            if action == CREATE_ACTION[content_type]:
                 created = True
-                break
 
             if args.mode == "pfna_test":
                 break
 
-            print(f"Skip and continue: {action}")
+            print(f"Continue batch after: {action}")
 
-        outcome = "created_draft" if created else "review_queue_only"
-        log_run(args.mode, decisions and {"id": decisions[-1]["diseaseId"], "name": decisions[-1]["diseaseName"]} or None, outcome, {
+        outcome = "created_drafts" if created else "review_queue_only"
+        log_run(args.mode, last_disease, outcome, {
             "checked": len(decisions),
             "created": created,
             "decisions": decisions,
             "savedDraft": bool(args.save_draft),
         })
-        print(f"\nScheduler summary: checked={len(decisions)}, created={created}")
+        print(f"\nV3 scheduler summary: processed={len(decisions)}, any_created={created}")
         return 0
 
     except ValidationError as exc:
@@ -469,7 +705,7 @@ def main() -> int:
     except Exception as exc:
         print(f"AUTO CURATOR FAILED: {exc}", file=sys.stderr)
         try:
-            log_run(args.mode, None, "error", {"error": str(exc)[:1000]})
+            log_run(args.mode, None, "error", {"error": str(exc)[:1200]})
         except Exception:
             pass
         return 1

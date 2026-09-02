@@ -4,19 +4,22 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "pfna_test=盲测；scan_one=连续扫描直到生成1个可审核Procedure"
+        description: "V3 全库分阶段：Patient → Rehab → Procedure；也可单独测试"
         required: true
         type: choice
-        default: pfna_test
+        default: content_scan
         options:
+          - content_scan
+          - patient_scan
+          - rehab_scan
+          - procedure_scan
           - pfna_test
-          - scan_one
       save_draft:
         description: "是否把结果保存到 Supabase 待审核队列"
         required: true
         type: boolean
         default: false
-  # 第一轮先只手动盲测。确认 DeepSeek 输出质量后再开启 schedule。
+  # V3 先继续手动测试。确认患者端/康复/Procedure 三类质量后再打开定时任务。
   # schedule:
   #   - cron: "37 3 * * *"
   #     timezone: "Asia/Shanghai"
@@ -31,13 +34,13 @@ concurrency:
 jobs:
   curator:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
       DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
       AUTOCURATOR_MODEL: deepseek-v4-flash
-      AUTOCURATOR_MAX_CANDIDATES: "6"
+      AUTOCURATOR_MAX_TASKS: "5"
 
     steps:
       - name: Checkout
@@ -54,9 +57,9 @@ jobs:
       - name: Static self-test
         run: python scripts/ortho_auto_curator.py --self-test
 
-      - name: Scheduled scan — generate one draft
+      - name: Scheduled content scan — generate one batch
         if: github.event_name == 'schedule'
-        run: python scripts/ortho_auto_curator.py --mode scan_one --save-draft
+        run: python scripts/ortho_auto_curator.py --mode content_scan --save-draft
 
       - name: Manual test/run
         if: github.event_name == 'workflow_dispatch'
@@ -72,7 +75,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: auto-curator-output-${{ github.run_number }}
+          name: auto-curator-v3-output-${{ github.run_number }}
           path: autocurator_output/
           if-no-files-found: ignore
           retention-days: 14

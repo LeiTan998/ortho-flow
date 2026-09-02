@@ -2,11 +2,21 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "additionalProperties": false,
-  "required": ["action", "reason", "reviewFlags"],
+  "required": ["contentType", "action", "reason", "reviewFlags"],
   "properties": {
+    "contentType": {
+      "type": "string",
+      "enum": ["patient_guide", "rehab_contract", "procedure"]
+    },
     "action": {
       "type": "string",
-      "enum": ["create_procedure", "no_procedure_recommended", "needs_human_selection"]
+      "enum": [
+        "create_patient_guide",
+        "create_rehab_contract",
+        "create_procedure",
+        "not_applicable",
+        "needs_human_selection"
+      ]
     },
     "reason": {"type": "string"},
     "reviewFlags": {
@@ -22,19 +32,132 @@
         }
       }
     },
+    "patientGuide": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "summary", "severity", "surgeryDecision", "recovery", "redFlags",
+        "visitPrep", "reviewStatus", "contentStatus"
+      ],
+      "properties": {
+        "summary": {"type": "string"},
+        "severity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["plainAnswer", "doctorsLookAt", "usuallyLessComplex", "usuallyMoreComplex", "cannotTellFromImagingAlone"],
+          "properties": {
+            "plainAnswer": {"type": "string"},
+            "doctorsLookAt": {"type": "array", "minItems": 3, "items": {"type": "string"}},
+            "usuallyLessComplex": {"type": "array", "items": {"type": "string"}},
+            "usuallyMoreComplex": {"type": "array", "items": {"type": "string"}},
+            "cannotTellFromImagingAlone": {"type": "array", "items": {"type": "string"}}
+          }
+        },
+        "surgeryDecision": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["plainAnswer", "oftenConservativeWhen", "surgeryMoreLikelyWhen", "whyPlansDiffer", "questionsForDoctor"],
+          "properties": {
+            "plainAnswer": {"type": "string"},
+            "oftenConservativeWhen": {"type": "array", "items": {"type": "string"}},
+            "surgeryMoreLikelyWhen": {"type": "array", "items": {"type": "string"}},
+            "whyPlansDiffer": {"type": "array", "items": {"type": "string"}},
+            "questionsForDoctor": {"type": "array", "minItems": 3, "items": {"type": "string"}}
+          }
+        },
+        "recovery": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["plainAnswer", "milestones", "unlockPrinciple", "recoveryNotGoingWell"],
+          "properties": {
+            "plainAnswer": {"type": "string"},
+            "milestones": {
+              "type": "array",
+              "minItems": 4,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["activity", "whatUsuallyMatters", "unlockWhen"],
+                "properties": {
+                  "activity": {"type": "string"},
+                  "whatUsuallyMatters": {"type": "string"},
+                  "unlockWhen": {"type": "array", "items": {"type": "string"}},
+                  "timingNote": {"type": "string"}
+                }
+              }
+            },
+            "unlockPrinciple": {"type": "array", "minItems": 4, "items": {"type": "string"}},
+            "recoveryNotGoingWell": {"type": "array", "items": {"type": "string"}}
+          }
+        },
+        "redFlags": {"type": "array", "minItems": 3, "items": {"type": "string"}},
+        "visitPrep": {"type": "array", "minItems": 3, "items": {"type": "string"}},
+        "reviewStatus": {"type": "string", "enum": ["draft"]},
+        "contentStatus": {"type": "string", "enum": ["ai_draft"]}
+      }
+    },
+    "rehabContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "principle", "locks", "activities", "warningSigns", "reviewStatus", "contentStatus"],
+      "properties": {
+        "title": {"type": "string"},
+        "principle": {"type": "string"},
+        "locks": {
+          "type": "array",
+          "minItems": 5,
+          "maxItems": 5,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "name", "question"],
+            "properties": {
+              "id": {"type": "string", "enum": ["time", "tissue", "symptoms", "function", "risk"]},
+              "name": {"type": "string"},
+              "question": {"type": "string"}
+            }
+          }
+        },
+        "activities": {
+          "type": "array",
+          "minItems": 6,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "name", "goal", "unlockWhen", "holdIf"],
+            "properties": {
+              "id": {"type": "string"},
+              "name": {"type": "string"},
+              "goal": {"type": "string"},
+              "typicalWindow": {"type": "string"},
+              "unlockWhen": {"type": "array", "minItems": 2, "items": {"type": "string"}},
+              "holdIf": {"type": "array", "items": {"type": "string"}},
+              "notes": {"type": "string"}
+            }
+          }
+        },
+        "warningSigns": {"type": "array", "minItems": 3, "items": {"type": "string"}},
+        "reviewStatus": {"type": "string", "enum": ["draft"]},
+        "contentStatus": {"type": "string", "enum": ["ai_draft"]}
+      }
+    },
     "procedure": {
       "type": "object",
       "additionalProperties": true,
       "required": [
-        "id", "name", "englishName", "summary", "scope", "goals",
+        "id", "name", "englishName", "procedureCategory", "summary", "scope", "goals",
         "approachGuide", "dangerStructures", "surgicalSteps", "instrumentGroups",
-        "imagingChecklist", "failureModes", "postopFramework",
-        "reviewStatus", "contentStatus"
+        "imagingChecklist", "failureModes", "postopFramework", "reviewStatus", "contentStatus"
       ],
       "properties": {
         "id": {"type": "string"},
         "name": {"type": "string"},
         "englishName": {"type": "string"},
+        "procedureCategory": {
+          "type": "string",
+          "enum": ["fracture_fixation", "arthroscopy", "arthroplasty", "spine", "soft_tissue_repair", "decompression", "other"]
+        },
+        "notApplicableFields": {"type": "array", "items": {"type": "string"}},
         "relatedDiseaseIds": {"type": "array", "items": {"type": "string"}},
         "summary": {"type": "string"},
         "scope": {"type": "string"},
@@ -168,5 +291,19 @@
         "contentStatus": {"type": "string", "enum": ["ai_draft"]}
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"action": {"const": "create_patient_guide"}}},
+      "then": {"required": ["patientGuide"]}
+    },
+    {
+      "if": {"properties": {"action": {"const": "create_rehab_contract"}}},
+      "then": {"required": ["rehabContract"]}
+    },
+    {
+      "if": {"properties": {"action": {"const": "create_procedure"}}},
+      "then": {"required": ["procedure"]}
+    }
+  ]
 }
