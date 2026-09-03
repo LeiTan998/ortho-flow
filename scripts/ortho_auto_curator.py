@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""OrthoFlow Auto Curator V3.1 Content Engine.
+"""OrthoFlow Auto Curator V3.2.2 Content Engine.
 
 V3 expands the scheduler from Procedure-only drafting to three draft types:
 - patient_guide
@@ -55,7 +55,7 @@ def supabase_headers() -> dict[str, str]:
     return {
         "apikey": need_env("SUPABASE_SECRET_KEY"),
         "Content-Type": "application/json",
-        "User-Agent": "orthoflow-auto-curator/3.2",
+        "User-Agent": "orthoflow-auto-curator/3.2.2",
     }
 
 
@@ -272,7 +272,7 @@ def common_rules(disease: dict[str, Any], content_type: str) -> str:
 
 def build_patient_prompt(disease: dict[str, Any]) -> str:
     return f"""
-你是 OrthoFlow Patient Guide V3.2 患者端内容编辑器。
+你是 OrthoFlow Patient Guide V3.2.2 患者端内容编辑器。
 目标不是写百科、教科书或康复方案，而是让一个焦虑的普通患者在 10 秒内先抓住重点。
 
 患者最想知道四件事：
@@ -286,7 +286,7 @@ def build_patient_prompt(disease: dict[str, Any]) -> str:
 现有疾病资料（只能作为背景；不要照抄其中绝对化、过时或过细的句子）：
 {json.dumps(disease, ensure_ascii=False, indent=2)}
 
-===== Patient Guide Gold Standard V3.1 =====
+===== Patient Guide Gold Standard V3.2.2 =====
 
 总原则：
 - 面向普通患者，尽量使用初中生能理解的中文；必须用医学词时立刻用一句白话解释。
@@ -295,6 +295,14 @@ def build_patient_prompt(disease: dict[str, Any]) -> str:
 - 不根据患者未提供的个体资料替他下诊断、决定术式或承诺预后。
 - 不制造“精确感”。除非该数字对安全非常必要且明确需要人工核对，否则 Patient Guide 第一层不要主动给固定周数、天数、毫米、角度、百分比、分级阈值。
 - Patient Guide 只讲恢复逻辑和大阶段；详细的脱拐、负重、跑步、驾驶、上班、运动时间表属于 Rehab Contract，不要在这里展开。
+
+疾病级内容边界（V3.2.2 硬规则）：
+- Patient Guide 是“疾病级”内容，不是“某个术式后的康复单”，不得默认患者已经手术、一定保守、一定卧床、一定不负重、一定使用石膏/支具/吊带、一定有内固定或人工关节。
+- 同一疾病如果存在保守、内固定、关节置换、不同修复方式等多条治疗路径，recovery 必须只写这些路径都成立的共同逻辑；具体路径差异只允许用一句条件句提示“取决于治疗方式和稳定性，由主治团队决定”。
+- 禁止把某个具体治疗路径的动作开放条件写成疾病通用规则。例如不得无条件写“暂时不能下地”“这一阶段不要求下地”“必须卧床”“完全不能踩地”“必须戴支具”“等 X 线出现骨痂后才开始关节活动”。
+- 不得把“看到骨痂/某个影像征象”单独设为允许关节活动、负重、脱拐或训练的通用开关；这些属于具体治疗路径和 Rehab Contract。
+- recovery 中不要用“几天、几周、几个月、半年、一年”等时间长度暗示患者何时应该恢复；即使是模糊时间，也优先改成“复查确认稳定 / 症状下降 / 功能达标 / 风险可接受”。
+- 可以提到“手术、内固定、假体、石膏、支具”等词来解释为什么不同患者路径不同，但不能据此给出疾病级动作处方。
 
 severity（我这个严重吗？）：
 - 第一条先用一句话告诉患者：这个病的严重程度主要由什么决定，而不是单看“有没有这个诊断”。
@@ -315,7 +323,9 @@ recovery（我什么时候能恢复？）：
 - timingNote 原则上留空；只有必须提醒“以术式/固定方式/主治医师要求为准”时才写一句，不得给固定天数、周数或月份。
 - 不列脱拐、负重、跑步、深蹲、驾驶、游泳、开车、上班、球类等逐项时间表；这些全部留给 Rehab Contract。
 - recovery.plainAnswer 控制为 2–4 句：说明恢复不是按日历自动解锁，并点出稳定性/组织愈合、症状、功能、风险。
-- unlockPrinciple 最多 3 条；recoveryNotGoingWell 最多 4 条。
+- recovery 的三个阶段必须是“治疗路径中立”的：不能把某一术式、某一固定方式或某一负重策略写成所有患者都适用。
+- 若一个 milestone 只有在某类术式后才成立，就改写成更上位的共同目标；实在无法路径中立时，宁可写“具体活动开放取决于治疗方式和稳定性，由主治团队决定”，不要补训练细节。
+- unlockPrinciple 最多 3 条；recoveryNotGoingWell 最多 4 条，且不要用“几天/几周/几个月后仍……”作为疾病级失败阈值。
 
 redFlags：
 - 只列真正值得及时就医/复诊的危险信号。
@@ -418,7 +428,7 @@ def deepseek_structured(prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
             {
                 "role": "system",
                 "content": (
-                    "你是 OrthoFlow Auto Curator V3.1。你必须输出严格 JSON。"
+                    "你是 OrthoFlow Auto Curator V3.2.2。你必须输出严格 JSON。"
                     "不要编造来源，不要把未经核验的医疗细节写成确定结论。"
                 ),
             },
@@ -438,7 +448,7 @@ def deepseek_structured(prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
                 headers={
                     "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json",
-                    "User-Agent": "orthoflow-auto-curator/3.2",
+                    "User-Agent": "orthoflow-auto-curator/3.2.2",
                 },
                 json=body,
                 timeout=240,
@@ -477,17 +487,20 @@ def deepseek_structured(prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
 def review_and_revise(first: dict[str, Any], disease: dict[str, Any], content_type: str, schema: dict[str, Any]) -> dict[str, Any]:
     if content_type == "patient_guide":
         focus = """
-重点按 Patient Guide V3.2 重新审稿，而不是只做医学纠错：
+重点按 Patient Guide V3.2.2 重新审稿，而不是只做医学纠错：
 1. 第一屏是否能快速回答“严重吗 / 要手术吗 / 恢复怎么看”，而不是先写百科背景。
 2. 普通患者是否能理解；删除不必要术语、长句、同义重复和教材式解释。
 3. severity / surgeryDecision 每部分优先压到 3–5 个核心要点；避免 summary、plainAnswer、列表反复说同一句话。
 4. 删除 Patient Guide 中不必要的固定周数、天数、毫米、角度、百分比和伪精确阈值；确有必要但不能核证的数字放 reviewFlags。
 5. recovery 必须执行“最小化”：最多 3 个 milestones；每个只写阶段目标和解锁条件，不得写训练菜单。whatUsuallyMatters 1–2 句；timingNote 默认空。详细负重、支具、屈伸角度、肌群训练、脱拐、驾驶、跑步、运动专项必须留给 Rehab Contract。
-6. recovery.plainAnswer 2–4 句，unlockPrinciple 最多 3 条，recoveryNotGoingWell 最多 4 条。
-7. 不把影像截图、分型或单个指标当最终诊断，也不把某分型直接等同手术。
-8. 不制造焦虑，不承诺恢复结果。redFlags 只留真正需要及时就医/复诊的 3–5 类信号。
-9. visitPrep 是前端主要“问医生什么”区域，保留 3–5 条；surgeryDecision.questionsForDoctor 压到 2–3 条且不要逐句重复。
-10. patient_guide 不得因为存在多个术式而返回 needs_human_selection；这是 Procedure 阶段问题。
+6. 做一次“治疗路径污染检查”：Patient Guide 是疾病级内容，删除任何把患者默认成“已手术/一定保守/一定卧床/一定不负重/一定戴支具石膏/一定有内固定或假体”的句子。若保守、内固定、置换等路径不同，只保留共同逻辑，并用条件句提示具体活动开放由主治团队按治疗方式和稳定性决定。
+7. 删除把“X 线出现骨痂/某个影像征象”单独当作关节活动、负重、脱拐或训练开放开关的通用表述。影像只能作为综合复查的一部分。
+8. 删除 recovery 中作为恢复阈值或进度暗示的“几天、几周、几个月、半年、一年”等时间说法；改成稳定性、症状、功能和风险条件。recoveryNotGoingWell 同样不要用日历时间作为疾病级失败标准。
+9. recovery.plainAnswer 2–4 句，unlockPrinciple 最多 3 条，recoveryNotGoingWell 最多 4 条。
+10. 不把影像截图、分型或单个指标当最终诊断，也不把某分型直接等同手术。
+11. 不制造焦虑，不承诺恢复结果。redFlags 只留真正需要及时就医/复诊的 3–5 类信号。
+12. visitPrep 是前端主要“问医生什么”区域，保留 3–5 条；surgeryDecision.questionsForDoctor 压到 2–3 条且不要逐句重复。
+13. patient_guide 不得因为存在多个术式而返回 needs_human_selection；这是 Procedure 阶段问题。
 """
     elif content_type == "rehab_contract":
         focus = """
@@ -540,7 +553,7 @@ def normalize_and_validate(result: dict[str, Any], disease: dict[str, Any], cont
         payload = result[payload_key]
         payload["reviewStatus"] = "draft"
         payload["contentStatus"] = "ai_draft"
-        payload["autoCuratorVersion"] = "auto-curator-v3.2-patient-minimal"
+        payload["autoCuratorVersion"] = "auto-curator-v3.2.2-treatment-path-safety"
         payload["autoCuratorModel"] = MODEL
         payload["generatedAt"] = datetime.now(timezone.utc).isoformat()
 
