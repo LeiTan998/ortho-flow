@@ -22,6 +22,7 @@ import json
 import os
 import re
 import sys
+from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -36,12 +37,42 @@ SCHEMA_PATH = ROOT / "autocurator" / "schema" / "content_engine_response.schema.
 OUTPUT_DIR = ROOT / "autocurator_output"
 
 MODEL = os.getenv("AUTOCURATOR_MODEL", "deepseek-v4-flash")
+PATIENT_VERSION = "auto-curator-v3.2.2-treatment-path-safety"
+API_USAGE: dict[str, int] = defaultdict(int)
 CONTENT_PRIORITY = {"patient_guide": 0, "rehab_contract": 1, "procedure": 2}
 CREATE_ACTION = {
     "patient_guide": "create_patient_guide",
     "rehab_contract": "create_rehab_contract",
     "procedure": "create_procedure",
 }
+
+
+def record_api_usage(usage: Any) -> None:
+    """Accumulate numeric DeepSeek usage fields across all calls and retries."""
+    if not isinstance(usage, dict):
+        return
+    for key, value in usage.items():
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, (int, float)):
+            API_USAGE[str(key)] += int(value)
+
+
+def usage_snapshot() -> dict[str, int]:
+    return dict(sorted(API_USAGE.items()))
+
+
+def is_fatal_full_run_error(exc: Exception) -> bool:
+    """Stop a full-library run when continuing would likely waste API spend."""
+    msg = str(exc)
+    fatal_markers = (
+        "DeepSeek API failed 401",
+        "DeepSeek API failed 402",
+        "Missing required environment variable",
+        "Supabase POST failed",
+        "Auto Curator tables are not installed",
+    )
+    return any(marker in msg for marker in fatal_markers)
 
 
 def need_env(name: str) -> str:
@@ -228,6 +259,7 @@ def select_phase_tasks(all_tasks: list[dict[str, Any]], mode: str) -> tuple[str 
     """
     explicit = {
         "patient_scan": "patient_guide",
+        "patient_full": "patient_guide",
         "rehab_scan": "rehab_contract",
         "procedure_scan": "procedure",
     }.get(mode)
@@ -241,6 +273,36 @@ def select_phase_tasks(all_tasks: list[dict[str, Any]], mode: str) -> tuple[str 
             return content_type, phase_tasks
 
     return None, []
+
+
+def validate_patient_full_queue() -> int:
+    """Ensure old Patient Guide drafts cannot silently block final-version regeneration."""
+    rows = sb_get("auto_curator_drafts", {
+        "select": "disease_id,disease_name,payload,generation_mode,status",
+        "status": "eq.pending_review",
+        "generation_mode": "eq.v3_patient_guide",
+    })
+    old_rows: list[dict[str, Any]] = []
+    final_rows = 0
+    for row in rows:
+        payload = row.get("payload") or {}
+        version = payload.get("autoCuratorVersion") if isinstance(payload, dict) else None
+        if version == PATIENT_VERSION:
+            final_rows += 1
+        else:
+            old_rows.append(row)
+
+    if old_rows:
+        names = [str(r.get("disease_name") or r.get("disease_id") or "unknown") for r in old_rows[:10]]
+        suffix = "" if len(old_rows) <= 10 else f" ... +{len(old_rows) - 10}"
+        raise RuntimeError(
+            "patient_full blocked: found "
+            f"{len(old_rows)} old pending Patient Guide drafts that would hide diseases from the scheduler. "
+            "Run the V3.2.2 cleanup SQL first. Examples: " + ", ".join(names) + suffix
+        )
+
+    print(f"Patient full queue guard: OK — final-version pending drafts already present: {final_rows}")
+    return final_rows
 
 
 def find_pfna_disease(diseases: list[dict[str, Any]]) -> dict[str, Any]:
@@ -457,6 +519,7 @@ def deepseek_structured(prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
                 raise RuntimeError(f"DeepSeek API failed {r.status_code}: {r.text[:1800]}")
 
             raw = r.json()
+            record_api_usage(raw.get("usage"))
             try:
                 choice = raw["choices"][0]
                 text = choice["message"]["content"]
@@ -553,7 +616,7 @@ def normalize_and_validate(result: dict[str, Any], disease: dict[str, Any], cont
         payload = result[payload_key]
         payload["reviewStatus"] = "draft"
         payload["contentStatus"] = "ai_draft"
-        payload["autoCuratorVersion"] = "auto-curator-v3.2.2-treatment-path-safety"
+        payload["autoCuratorVersion"] = PATIENT_VERSION if content_type == "patient_guide" else "auto-curator-v3.2.2-treatment-path-safety"
         payload["autoCuratorModel"] = MODEL
         payload["generatedAt"] = datetime.now(timezone.utc).isoformat()
 
@@ -652,14 +715,14 @@ def self_test() -> None:
             "reason": "self test",
             "reviewFlags": [],
         }, schema=schema)
-    print("SELF TEST OK — V3.1 patient quality patch")
+    print("SELF TEST OK — V3.2.2 full-library runner")
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--mode",
-        choices=["content_scan", "patient_scan", "rehab_scan", "procedure_scan", "pfna_test"],
+        choices=["content_scan", "patient_scan", "patient_full", "rehab_scan", "procedure_scan", "pfna_test"],
         default="content_scan",
     )
     parser.add_argument("--save-draft", action="store_true")
@@ -670,6 +733,10 @@ def main() -> int:
     if args.self_test:
         self_test()
         return 0
+
+    if args.mode == "patient_full" and not args.save_draft:
+        print("AUTO CURATOR FAILED: patient_full requires --save-draft to avoid an expensive unsaved full-library run.", file=sys.stderr)
+        return 1
 
     schema = load_json(SCHEMA_PATH)
     try:
@@ -684,12 +751,19 @@ def main() -> int:
             tasks = [{"disease": disease, "contentType": "procedure", "viewCount": disease.get("viewCount", 0), "pfnaTest": True}]
             max_tasks = 1
         else:
+            if args.mode == "patient_full":
+                validate_patient_full_queue()
             all_tasks = task_candidates(diseases, procedures)
             phase, tasks = select_phase_tasks(all_tasks, args.mode)
-            max_tasks = int(os.getenv("AUTOCURATOR_MAX_TASKS", "5"))
+            if args.mode == "patient_full":
+                max_tasks = int(os.getenv("AUTOCURATOR_FULL_MAX_TASKS", "9999"))
+                print("FULL PATIENT LIBRARY MODE: ON")
+            else:
+                max_tasks = int(os.getenv("AUTOCURATOR_MAX_TASKS", "5"))
             if phase:
                 print(f"Active V3 phase: {phase}")
                 print(f"Remaining eligible tasks in phase: {len(tasks)}")
+                print(f"Task cap for this run: {max_tasks}")
 
         if not tasks:
             print("No eligible V3 content gap found.")
@@ -697,72 +771,114 @@ def main() -> int:
             return 0
 
         decisions: list[dict[str, Any]] = []
-        created = False
+        failures: list[dict[str, str]] = []
+        created_count = 0
         last_disease: dict[str, Any] | None = None
+        selected_tasks = tasks[:max_tasks]
 
-        for task in tasks[:max_tasks]:
+        for index, task in enumerate(selected_tasks, start=1):
             disease = task["disease"]
             content_type = task["contentType"]
             last_disease = disease
             print("\n============================================================")
+            print(f"Progress: {index}/{len(selected_tasks)}")
             print(f"Target disease: {disease['name']} ({disease['id']})")
             print(f"Content type: {content_type}")
             print(f"View count: {task.get('viewCount', 0)}")
             print(f"Model: {MODEL}")
-            if content_type == "procedure":
-                print(f"Existing concrete procedures: {concrete_procedure_ids(disease, procedures) or 'none'}")
 
-            prompt = build_prompt(content_type, disease, procedures, pfna_test=bool(task.get("pfnaTest")))
-            first = deepseek_structured(prompt, schema)
-            first = normalize_and_validate(first, disease, content_type, schema)
+            try:
+                if content_type == "procedure":
+                    print(f"Existing concrete procedures: {concrete_procedure_ids(disease, procedures) or 'none'}")
 
-            result = first
-            # Second pass only for drafts that may become actual content.
-            if first.get("action") == CREATE_ACTION[content_type] and not args.no_review:
-                result = review_and_revise(first, disease, content_type, schema)
-                result = normalize_and_validate(result, disease, content_type, schema)
+                prompt = build_prompt(content_type, disease, procedures, pfna_test=bool(task.get("pfnaTest")))
+                first = deepseek_structured(prompt, schema)
+                first = normalize_and_validate(first, disease, content_type, schema)
 
-            if args.mode == "pfna_test" and result.get("action") == "create_procedure":
-                result["procedure"]["id"] = "intertrochanteric_pfna_ai_test"
-                result["procedure"]["name"] = "PFNA 内固定术（AI盲测草稿）"
+                result = first
+                # Second pass only for drafts that may become actual content.
+                if first.get("action") == CREATE_ACTION[content_type] and not args.no_review:
+                    result = review_and_revise(first, disease, content_type, schema)
+                    result = normalize_and_validate(result, disease, content_type, schema)
 
-            artifact = save_artifact(result, disease, content_type)
-            action = result["action"]
-            print(f"Artifact: {artifact.relative_to(ROOT)}")
-            print(f"Action: {action}")
-            print(f"Review flags: {len(result.get('reviewFlags') or [])}")
+                if args.mode == "pfna_test" and result.get("action") == "create_procedure":
+                    result["procedure"]["id"] = "intertrochanteric_pfna_ai_test"
+                    result["procedure"]["name"] = "PFNA 内固定术（AI盲测草稿）"
 
-            if args.save_draft:
-                save_draft(result, disease, content_type)
-                print("Saved to Supabase auto_curator_drafts: YES")
-            else:
-                print("Saved to Supabase auto_curator_drafts: NO (dry-run)")
+                artifact = save_artifact(result, disease, content_type)
+                action = result["action"]
+                print(f"Artifact: {artifact.relative_to(ROOT)}")
+                print(f"Action: {action}")
+                print(f"Review flags: {len(result.get('reviewFlags') or [])}")
 
-            decisions.append({
-                "diseaseId": disease["id"],
-                "diseaseName": disease["name"],
-                "contentType": content_type,
-                "action": action,
-                "artifact": str(artifact.relative_to(ROOT)),
-                "reviewFlags": len(result.get("reviewFlags") or []),
-            })
+                if args.save_draft:
+                    save_draft(result, disease, content_type)
+                    print("Saved to Supabase auto_curator_drafts: YES")
+                else:
+                    print("Saved to Supabase auto_curator_drafts: NO (dry-run)")
 
-            if action == CREATE_ACTION[content_type]:
-                created = True
+                decisions.append({
+                    "diseaseId": disease["id"],
+                    "diseaseName": disease["name"],
+                    "contentType": content_type,
+                    "action": action,
+                    "artifact": str(artifact.relative_to(ROOT)),
+                    "reviewFlags": len(result.get("reviewFlags") or []),
+                })
 
-            if args.mode == "pfna_test":
-                break
+                if action == CREATE_ACTION[content_type]:
+                    created_count += 1
 
-            print(f"Continue batch after: {action}")
+                if args.mode == "pfna_test":
+                    break
 
-        outcome = "created_drafts" if created else "review_queue_only"
+                print(f"Continue batch after: {action}")
+
+            except Exception as exc:
+                if args.mode != "patient_full" or is_fatal_full_run_error(exc):
+                    raise
+                error_text = str(exc)[:1200]
+                failure = {
+                    "diseaseId": str(disease.get("id") or ""),
+                    "diseaseName": str(disease.get("name") or ""),
+                    "error": error_text,
+                }
+                failures.append(failure)
+                decisions.append({
+                    "diseaseId": disease.get("id"),
+                    "diseaseName": disease.get("name"),
+                    "contentType": content_type,
+                    "action": "error",
+                    "error": error_text,
+                })
+                print(f"::warning::Skipped after per-disease failure: {disease.get('name')} — {error_text}", file=sys.stderr)
+                print("Continuing full-library run; rerun patient_full later to retry missing diseases.")
+
+        if failures:
+            outcome = "partial_success"
+        elif created_count > 0:
+            outcome = "created_drafts"
+        else:
+            outcome = "review_queue_only"
+
+        usage = usage_snapshot()
         log_run(args.mode, last_disease, outcome, {
             "checked": len(decisions),
-            "created": created,
+            "createdCount": created_count,
+            "failedCount": len(failures),
+            "failures": failures,
             "decisions": decisions,
             "savedDraft": bool(args.save_draft),
+            "apiUsage": usage,
         })
-        print(f"\nV3 scheduler summary: processed={len(decisions)}, any_created={created}")
+        print(f"\nV3 scheduler summary: processed={len(decisions)}, created={created_count}, failed={len(failures)}")
+        print("DeepSeek usage totals: " + json.dumps(usage, ensure_ascii=False, sort_keys=True))
+        if failures:
+            print(f"::warning::Full run completed with {len(failures)} disease-level failures. Rerun patient_full to retry them.")
+        elif args.mode == "patient_full" and len(selected_tasks) < len(tasks):
+            print(f"::warning::Full run hit task cap {max_tasks}; rerun patient_full for remaining diseases.")
+        elif args.mode == "patient_full":
+            print("FULL PATIENT LIBRARY PASS COMPLETE — rerun once to confirm 'No eligible V3 content gap found.'")
         return 0
 
     except ValidationError as exc:
@@ -770,6 +886,7 @@ def main() -> int:
         return 2
     except Exception as exc:
         print(f"AUTO CURATOR FAILED: {exc}", file=sys.stderr)
+        print("DeepSeek usage totals before failure: " + json.dumps(usage_snapshot(), ensure_ascii=False, sort_keys=True), file=sys.stderr)
         try:
             log_run(args.mode, None, "error", {"error": str(exc)[:1200]})
         except Exception:

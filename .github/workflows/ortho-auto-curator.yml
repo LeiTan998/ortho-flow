@@ -4,22 +4,23 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "V3 全库分阶段：Patient → Rehab → Procedure；也可单独测试"
+        description: "V3：单批测试，或一键跑完整个 Patient Guide 全库"
         required: true
         type: choice
-        default: content_scan
+        default: patient_scan
         options:
-          - content_scan
           - patient_scan
+          - patient_full
+          - content_scan
           - rehab_scan
           - procedure_scan
           - pfna_test
       save_draft:
-        description: "是否把结果保存到 Supabase 待审核队列"
+        description: "是否把结果保存到 Supabase 待审核队列；patient_full 必须勾选"
         required: true
         type: boolean
-        default: false
-  # V3 先继续手动测试。确认患者端/康复/Procedure 三类质量后再打开定时任务。
+        default: true
+  # 仍保持手动。Patient/Rehab/Procedure 全部稳定并建立审核发布机制后再考虑定时任务。
   # schedule:
   #   - cron: "37 3 * * *"
   #     timezone: "Asia/Shanghai"
@@ -34,13 +35,15 @@ concurrency:
 jobs:
   curator:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # GitHub-hosted job 上限内留出余量；全库顺序跑时最长约 5.5 小时。
+    timeout-minutes: 330
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
       DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
       AUTOCURATOR_MODEL: deepseek-v4-flash
       AUTOCURATOR_MAX_TASKS: "5"
+      AUTOCURATOR_FULL_MAX_TASKS: "9999"
 
     steps:
       - name: Checkout
@@ -57,11 +60,11 @@ jobs:
       - name: Static self-test
         run: python scripts/ortho_auto_curator.py --self-test
 
-      - name: Scheduled content scan — generate one batch
+      - name: Scheduled content scan
         if: github.event_name == 'schedule'
         run: python scripts/ortho_auto_curator.py --mode content_scan --save-draft
 
-      - name: Manual test/run
+      - name: Manual run
         if: github.event_name == 'workflow_dispatch'
         shell: bash
         run: |
