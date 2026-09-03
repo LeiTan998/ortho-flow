@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""OrthoFlow Auto Curator V3 Content Engine.
+"""OrthoFlow Auto Curator V3.1 Content Engine.
 
 V3 expands the scheduler from Procedure-only drafting to three draft types:
 - patient_guide
@@ -55,7 +55,7 @@ def supabase_headers() -> dict[str, str]:
     return {
         "apikey": need_env("SUPABASE_SECRET_KEY"),
         "Content-Type": "application/json",
-        "User-Agent": "orthoflow-auto-curator/3.0",
+        "User-Agent": "orthoflow-auto-curator/3.1",
     }
 
 
@@ -272,22 +272,61 @@ def common_rules(disease: dict[str, Any], content_type: str) -> str:
 
 def build_patient_prompt(disease: dict[str, Any]) -> str:
     return f"""
-你是 OrthoFlow 患者端内容编辑器。目标不是写百科，而是回答患者最常问的三件事：
-“严重吗？”“要手术吗？”“什么时候能恢复？”
+你是 OrthoFlow Patient Guide V3.1 患者端内容编辑器。
+目标不是写百科、教科书或康复方案，而是让一个焦虑的普通患者在 10 秒内先抓住重点。
+
+患者最想知道四件事：
+1. 我这个严重吗？
+2. 我需要手术吗？
+3. 我大概怎样恢复？
+4. 我下次复诊应该问什么？
 
 {common_rules(disease, 'patient_guide')}
 
-现有疾病资料（只能作为背景，不要照抄绝对化旧句）：
+现有疾病资料（只能作为背景；不要照抄其中绝对化、过时或过细的句子）：
 {json.dumps(disease, ensure_ascii=False, indent=2)}
 
-写作要求：
-- 语言让普通患者能看懂，但不要幼稚化。
-- severity：解释医生真正看哪些维度；把“相对简单/更复杂”写成条件，不写成诊断结论。
-- surgeryDecision：强调症状、稳定性、功能需求、完整影像、软组织/神经血管等共同决定；不能输出“某分型=某手术”。
-- recovery：至少覆盖日常走路/负重或活动、脱拐或辅助器具、工作、运动回归等适合该病的里程碑；若某项不适用可换成更相关活动。
-- redFlags：只列需要及时就医/复诊的通用危险信号，不制造恐慌。
-- visitPrep：告诉患者复诊时应该带什么、问什么。
-- action 应为 create_patient_guide；只有疾病概念本身明显不适合患者三问结构时才用 not_applicable。
+===== Patient Guide Gold Standard V3.1 =====
+
+总原则：
+- 面向普通患者，尽量使用初中生能理解的中文；必须用医学词时立刻用一句白话解释。
+- 先回答，再解释。不要先铺背景知识。
+- 短。每个核心部分优先 3–5 个要点，避免长段落和同义重复。
+- 不根据患者未提供的个体资料替他下诊断、决定术式或承诺预后。
+- 不制造“精确感”。除非该数字对安全非常必要且明确需要人工核对，否则 Patient Guide 第一层不要主动给固定周数、天数、毫米、角度、百分比、分级阈值。
+- Patient Guide 只讲恢复逻辑和大阶段；详细的脱拐、负重、跑步、驾驶、上班、运动时间表属于 Rehab Contract，不要在这里展开。
+
+severity（我这个严重吗？）：
+- 第一条先用一句话告诉患者：这个病的严重程度主要由什么决定，而不是单看“有没有这个诊断”。
+- 只保留 3–5 个真正决定严重程度的维度。
+- 清楚区分“通常相对简单的情况”和“更需要重视/更复杂的情况”。
+- 不把影像截图、某个分型或单个指标直接等同于最终严重程度。
+
+surgeryDecision（我需要手术吗？）：
+- 先说明是否手术通常取决于哪些关键条件。
+- 分成“通常可先考虑保守的条件”和“更可能需要讨论手术的条件”。
+- 必须强调症状、稳定性/移位、功能需求、完整影像、软组织/神经血管及合并损伤等共同决定。
+- 不能写“某分型=某手术”“看到某一个征象就必须手术”。
+
+recovery（我什么时候能恢复？）：
+- 只解释恢复由哪些条件控制，并给出从保护期→功能恢复→回归工作/运动的大阶段。
+- 最多写 3–5 个恢复要点。
+- 不在这里详细列脱拐、负重、跑步、深蹲、驾驶、游泳等逐项时间表；这些留给 Rehab Contract。
+- 强调“时间只是一个条件”，还要结合组织/固定稳定性、疼痛肿胀、活动度、力量控制和风险。
+
+redFlags：
+- 只列真正值得及时就医/复诊的危险信号。
+- 3–5 条为宜，不为了显得全面而堆砌罕见并发症。
+
+visitPrep（下次复诊我该问什么？）：
+- 优先给 3–5 个患者可以直接拿去问医生的问题。
+- 问题应帮助患者澄清：目前是否稳定/严重、保守还是手术、下一阶段目标、复查依据、哪些情况需提前复诊。
+- 如 schema 还包含“带什么资料”，只保留最必要的完整影像、报告、既往手术/治疗资料。
+
+动作规则：
+- patient_scan 的正常动作只能是 create_patient_guide。
+- 只有疾病概念本身确实不适合患者三问结构时才允许 not_applicable。
+- Patient Guide 不允许因为“存在多个手术方式”就返回 needs_human_selection；那是 Procedure 阶段的问题。患者端仍应解释决定手术与否的原则。
 - patientGuide.reviewStatus=draft，contentStatus=ai_draft。
 """.strip()
 
@@ -375,7 +414,7 @@ def deepseek_structured(prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
             {
                 "role": "system",
                 "content": (
-                    "你是 OrthoFlow Auto Curator V3。你必须输出严格 JSON。"
+                    "你是 OrthoFlow Auto Curator V3.1。你必须输出严格 JSON。"
                     "不要编造来源，不要把未经核验的医疗细节写成确定结论。"
                 ),
             },
@@ -395,7 +434,7 @@ def deepseek_structured(prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
                 headers={
                     "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json",
-                    "User-Agent": "orthoflow-auto-curator/3.0",
+                    "User-Agent": "orthoflow-auto-curator/3.1",
                 },
                 json=body,
                 timeout=240,
@@ -434,7 +473,16 @@ def deepseek_structured(prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
 def review_and_revise(first: dict[str, Any], disease: dict[str, Any], content_type: str, schema: dict[str, Any]) -> dict[str, Any]:
     if content_type == "patient_guide":
         focus = """
-重点检查：是否把影像截图当成最终诊断；是否把分型直接等同手术；是否制造焦虑；是否给了过度确定的恢复周数；普通患者是否能理解。
+重点按 Patient Guide V3.1 重新审稿，而不是只做医学纠错：
+1. 第一屏是否能快速回答“严重吗 / 要手术吗 / 恢复怎么看”，而不是先写百科背景。
+2. 普通患者是否能理解；删除不必要术语、长句、同义重复和教材式解释。
+3. severity / surgeryDecision / recovery 每部分优先压到 3–5 个核心要点。
+4. 删除 Patient Guide 中不必要的固定周数、天数、毫米、角度、百分比和伪精确阈值；确有必要但不能核证的数字放 reviewFlags。
+5. recovery 只保留恢复原则和大阶段；详细负重、脱拐、驾驶、跑步、运动回归必须留给 Rehab Contract。
+6. 不把影像截图、分型或单个指标当最终诊断，也不把某分型直接等同手术。
+7. 不制造焦虑，不承诺恢复结果。redFlags 只留真正需要及时就医/复诊的 3–5 类信号。
+8. visitPrep 优先变成患者可以直接问医生的 3–5 个问题。
+9. patient_guide 不得因为存在多个术式而返回 needs_human_selection；这是 Procedure 阶段问题。
 """
     elif content_type == "rehab_contract":
         focus = """
@@ -487,7 +535,7 @@ def normalize_and_validate(result: dict[str, Any], disease: dict[str, Any], cont
         payload = result[payload_key]
         payload["reviewStatus"] = "draft"
         payload["contentStatus"] = "ai_draft"
-        payload["autoCuratorVersion"] = "auto-curator-v3-content-engine"
+        payload["autoCuratorVersion"] = "auto-curator-v3.1-patient-quality"
         payload["autoCuratorModel"] = MODEL
         payload["generatedAt"] = datetime.now(timezone.utc).isoformat()
 
@@ -586,7 +634,7 @@ def self_test() -> None:
             "reason": "self test",
             "reviewFlags": [],
         }, schema=schema)
-    print("SELF TEST OK — V3 content engine")
+    print("SELF TEST OK — V3.1 patient quality patch")
 
 
 def main() -> int:
