@@ -2,11 +2,20 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "additionalProperties": false,
-  "required": ["contentType", "action", "reason", "reviewFlags"],
+  "required": [
+    "contentType",
+    "action",
+    "reason",
+    "reviewFlags"
+  ],
   "properties": {
     "contentType": {
       "type": "string",
-      "enum": ["patient_guide", "rehab_contract", "procedure"]
+      "enum": [
+        "patient_guide",
+        "rehab_contract",
+        "procedure"
+      ]
     },
     "action": {
       "type": "string",
@@ -18,17 +27,34 @@
         "needs_human_selection"
       ]
     },
-    "reason": {"type": "string"},
+    "reason": {
+      "type": "string"
+    },
     "reviewFlags": {
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["severity", "field", "issue"],
+        "required": [
+          "severity",
+          "field",
+          "issue"
+        ],
         "properties": {
-          "severity": {"type": "string", "enum": ["low", "medium", "high"]},
-          "field": {"type": "string"},
-          "issue": {"type": "string"}
+          "severity": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "field": {
+            "type": "string"
+          },
+          "issue": {
+            "type": "string"
+          }
         }
       }
     },
@@ -36,73 +62,208 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "summary", "severity", "surgeryDecision", "recovery", "redFlags",
-        "visitPrep", "reviewStatus", "contentStatus"
+        "summary",
+        "severity",
+        "surgeryDecision",
+        "recovery",
+        "redFlags",
+        "visitPrep",
+        "reviewStatus",
+        "contentStatus"
       ],
       "properties": {
-        "summary": {"type": "string"},
+        "summary": {
+          "type": "string"
+        },
         "severity": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["plainAnswer", "doctorsLookAt", "usuallyLessComplex", "usuallyMoreComplex", "cannotTellFromImagingAlone"],
+          "required": [
+            "plainAnswer",
+            "doctorsLookAt",
+            "usuallyLessComplex",
+            "usuallyMoreComplex",
+            "cannotTellFromImagingAlone"
+          ],
           "properties": {
-            "plainAnswer": {"type": "string"},
-            "doctorsLookAt": {"type": "array", "minItems": 3, "items": {"type": "string"}},
-            "usuallyLessComplex": {"type": "array", "items": {"type": "string"}},
-            "usuallyMoreComplex": {"type": "array", "items": {"type": "string"}},
-            "cannotTellFromImagingAlone": {"type": "array", "items": {"type": "string"}}
+            "plainAnswer": {
+              "type": "string"
+            },
+            "doctorsLookAt": {
+              "type": "array",
+              "minItems": 3,
+              "items": {
+                "type": "string"
+              }
+            },
+            "usuallyLessComplex": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "usuallyMoreComplex": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "cannotTellFromImagingAlone": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           }
         },
         "surgeryDecision": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["plainAnswer", "oftenConservativeWhen", "surgeryMoreLikelyWhen", "whyPlansDiffer", "questionsForDoctor"],
+          "required": [
+            "plainAnswer",
+            "oftenConservativeWhen",
+            "surgeryMoreLikelyWhen",
+            "whyPlansDiffer",
+            "questionsForDoctor"
+          ],
           "properties": {
-            "plainAnswer": {"type": "string"},
-            "oftenConservativeWhen": {"type": "array", "items": {"type": "string"}},
-            "surgeryMoreLikelyWhen": {"type": "array", "items": {"type": "string"}},
-            "whyPlansDiffer": {"type": "array", "items": {"type": "string"}},
-            "questionsForDoctor": {"type": "array", "minItems": 3, "items": {"type": "string"}}
+            "plainAnswer": {
+              "type": "string"
+            },
+            "oftenConservativeWhen": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "surgeryMoreLikelyWhen": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "whyPlansDiffer": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "questionsForDoctor": {
+              "type": "array",
+              "minItems": 3,
+              "items": {
+                "type": "string"
+              }
+            }
           }
         },
         "recovery": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["plainAnswer", "milestones", "unlockPrinciple", "recoveryNotGoingWell"],
+          "required": [
+            "plainAnswer",
+            "milestones",
+            "unlockPrinciple",
+            "recoveryNotGoingWell"
+          ],
           "properties": {
-            "plainAnswer": {"type": "string"},
+            "plainAnswer": {
+              "type": "string"
+            },
             "milestones": {
               "type": "array",
-              "minItems": 4,
+              "minItems": 1,
               "items": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["activity", "whatUsuallyMatters", "unlockWhen"],
+                "required": [
+                  "activity",
+                  "whatUsuallyMatters",
+                  "unlockWhen"
+                ],
                 "properties": {
-                  "activity": {"type": "string"},
-                  "whatUsuallyMatters": {"type": "string"},
-                  "unlockWhen": {"type": "array", "items": {"type": "string"}},
-                  "timingNote": {"type": "string"}
+                  "activity": {
+                    "type": "string"
+                  },
+                  "whatUsuallyMatters": {
+                    "type": "string"
+                  },
+                  "unlockWhen": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "timingNote": {
+                    "type": "string"
+                  }
                 }
-              }
+              },
+              "maxItems": 3
             },
-            "unlockPrinciple": {"type": "array", "minItems": 4, "items": {"type": "string"}},
-            "recoveryNotGoingWell": {"type": "array", "items": {"type": "string"}}
+            "unlockPrinciple": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 3
+            },
+            "recoveryNotGoingWell": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           }
         },
-        "redFlags": {"type": "array", "minItems": 3, "items": {"type": "string"}},
-        "visitPrep": {"type": "array", "minItems": 3, "items": {"type": "string"}},
-        "reviewStatus": {"type": "string", "enum": ["draft"]},
-        "contentStatus": {"type": "string", "enum": ["ai_draft"]}
+        "redFlags": {
+          "type": "array",
+          "minItems": 3,
+          "items": {
+            "type": "string"
+          }
+        },
+        "visitPrep": {
+          "type": "array",
+          "minItems": 3,
+          "items": {
+            "type": "string"
+          }
+        },
+        "reviewStatus": {
+          "type": "string",
+          "enum": [
+            "draft"
+          ]
+        },
+        "contentStatus": {
+          "type": "string",
+          "enum": [
+            "ai_draft"
+          ]
+        }
       }
     },
     "rehabContract": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["title", "principle", "locks", "activities", "warningSigns", "reviewStatus", "contentStatus"],
+      "required": [
+        "title",
+        "principle",
+        "locks",
+        "activities",
+        "warningSigns",
+        "reviewStatus",
+        "contentStatus"
+      ],
       "properties": {
-        "title": {"type": "string"},
-        "principle": {"type": "string"},
+        "title": {
+          "type": "string"
+        },
+        "principle": {
+          "type": "string"
+        },
         "locks": {
           "type": "array",
           "minItems": 5,
@@ -110,11 +271,28 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["id", "name", "question"],
+            "required": [
+              "id",
+              "name",
+              "question"
+            ],
             "properties": {
-              "id": {"type": "string", "enum": ["time", "tissue", "symptoms", "function", "risk"]},
-              "name": {"type": "string"},
-              "question": {"type": "string"}
+              "id": {
+                "type": "string",
+                "enum": [
+                  "time",
+                  "tissue",
+                  "symptoms",
+                  "function",
+                  "risk"
+                ]
+              },
+              "name": {
+                "type": "string"
+              },
+              "question": {
+                "type": "string"
+              }
             }
           }
         },
@@ -124,86 +302,280 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["id", "name", "goal", "unlockWhen", "holdIf"],
+            "required": [
+              "id",
+              "name",
+              "goal",
+              "unlockWhen",
+              "holdIf"
+            ],
             "properties": {
-              "id": {"type": "string"},
-              "name": {"type": "string"},
-              "goal": {"type": "string"},
-              "typicalWindow": {"type": "string"},
-              "unlockWhen": {"type": "array", "minItems": 2, "items": {"type": "string"}},
-              "holdIf": {"type": "array", "items": {"type": "string"}},
-              "notes": {"type": "string"}
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "goal": {
+                "type": "string"
+              },
+              "typicalWindow": {
+                "type": "string"
+              },
+              "unlockWhen": {
+                "type": "array",
+                "minItems": 2,
+                "items": {
+                  "type": "string"
+                }
+              },
+              "holdIf": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "notes": {
+                "type": "string"
+              }
             }
           }
         },
-        "warningSigns": {"type": "array", "minItems": 3, "items": {"type": "string"}},
-        "reviewStatus": {"type": "string", "enum": ["draft"]},
-        "contentStatus": {"type": "string", "enum": ["ai_draft"]}
+        "warningSigns": {
+          "type": "array",
+          "minItems": 3,
+          "items": {
+            "type": "string"
+          }
+        },
+        "reviewStatus": {
+          "type": "string",
+          "enum": [
+            "draft"
+          ]
+        },
+        "contentStatus": {
+          "type": "string",
+          "enum": [
+            "ai_draft"
+          ]
+        }
       }
     },
     "procedure": {
       "type": "object",
       "additionalProperties": true,
       "required": [
-        "id", "name", "englishName", "procedureCategory", "summary", "scope", "goals",
-        "approachGuide", "dangerStructures", "surgicalSteps", "instrumentGroups",
-        "imagingChecklist", "failureModes", "postopFramework", "reviewStatus", "contentStatus"
+        "id",
+        "name",
+        "englishName",
+        "procedureCategory",
+        "summary",
+        "scope",
+        "goals",
+        "approachGuide",
+        "dangerStructures",
+        "surgicalSteps",
+        "instrumentGroups",
+        "imagingChecklist",
+        "failureModes",
+        "postopFramework",
+        "reviewStatus",
+        "contentStatus"
       ],
       "properties": {
-        "id": {"type": "string"},
-        "name": {"type": "string"},
-        "englishName": {"type": "string"},
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "englishName": {
+          "type": "string"
+        },
         "procedureCategory": {
           "type": "string",
-          "enum": ["fracture_fixation", "arthroscopy", "arthroplasty", "spine", "soft_tissue_repair", "decompression", "other"]
+          "enum": [
+            "fracture_fixation",
+            "arthroscopy",
+            "arthroplasty",
+            "spine",
+            "soft_tissue_repair",
+            "decompression",
+            "other"
+          ]
         },
-        "notApplicableFields": {"type": "array", "items": {"type": "string"}},
-        "relatedDiseaseIds": {"type": "array", "items": {"type": "string"}},
-        "summary": {"type": "string"},
-        "scope": {"type": "string"},
-        "goals": {"type": "array", "items": {"type": "string"}},
-        "indicationScenarios": {"type": "array", "items": {"type": "string"}},
-        "notSuitableScenarios": {"type": "array", "items": {"type": "string"}},
-        "preopImaging": {"type": "array", "items": {"type": "string"}},
-        "positioning": {"type": "array", "items": {"type": "string"}},
-        "cArm": {"type": "array", "items": {"type": "string"}},
+        "notApplicableFields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "relatedDiseaseIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "summary": {
+          "type": "string"
+        },
+        "scope": {
+          "type": "string"
+        },
+        "goals": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "indicationScenarios": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "notSuitableScenarios": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "preopImaging": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "positioning": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "cArm": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "approachGuide": {
           "type": "array",
           "minItems": 1,
           "items": {
             "type": "object",
             "additionalProperties": true,
-            "required": ["id", "name", "bestFor", "anatomyLayers", "dangerStructures", "keyPoint"],
+            "required": [
+              "id",
+              "name",
+              "bestFor",
+              "anatomyLayers",
+              "dangerStructures",
+              "keyPoint"
+            ],
             "properties": {
-              "id": {"type": "string"},
-              "name": {"type": "string"},
-              "englishName": {"type": "string"},
-              "bestFor": {"type": "array", "items": {"type": "string"}},
-              "exposes": {"type": "array", "items": {"type": "string"}},
-              "anatomyLayers": {"type": "array", "items": {"type": "string"}},
-              "dangerStructures": {"type": "array", "items": {"type": "string"}},
-              "limitations": {"type": "array", "items": {"type": "string"}},
-              "keyPoint": {"type": "string"},
-              "humanReviewRequired": {"type": "boolean"}
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "englishName": {
+                "type": "string"
+              },
+              "bestFor": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "exposes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "anatomyLayers": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "dangerStructures": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "limitations": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "keyPoint": {
+                "type": "string"
+              },
+              "humanReviewRequired": {
+                "type": "boolean"
+              }
             }
           }
         },
-        "dangerStructures": {"type": "array", "items": {"type": "string"}},
+        "dangerStructures": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "surgicalSteps": {
           "type": "array",
           "minItems": 5,
           "items": {
             "type": "object",
             "additionalProperties": true,
-            "required": ["id", "title", "goal", "actions", "watchFor", "checkpoint"],
+            "required": [
+              "id",
+              "title",
+              "goal",
+              "actions",
+              "watchFor",
+              "checkpoint"
+            ],
             "properties": {
-              "id": {"type": "string"},
-              "title": {"type": "string"},
-              "goal": {"type": "string"},
-              "actions": {"type": "array", "items": {"type": "string"}},
-              "instruments": {"type": "array", "items": {"type": "string"}},
-              "watchFor": {"type": "array", "items": {"type": "string"}},
-              "checkpoint": {"type": "array", "items": {"type": "string"}}
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "goal": {
+                "type": "string"
+              },
+              "actions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "instruments": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "watchFor": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "checkpoint": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
             }
           }
         },
@@ -212,52 +584,124 @@
           "items": {
             "type": "object",
             "additionalProperties": true,
-            "required": ["group", "items"],
+            "required": [
+              "group",
+              "items"
+            ],
             "properties": {
-              "group": {"type": "string"},
+              "group": {
+                "type": "string"
+              },
               "items": {
                 "type": "array",
                 "items": {
                   "type": "object",
                   "additionalProperties": true,
-                  "required": ["name", "role"],
+                  "required": [
+                    "name",
+                    "role"
+                  ],
                   "properties": {
-                    "name": {"type": "string"},
-                    "role": {"type": "string"},
-                    "when": {"type": "string"},
-                    "commonMistake": {"type": "string"}
+                    "name": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "when": {
+                      "type": "string"
+                    },
+                    "commonMistake": {
+                      "type": "string"
+                    }
                   }
                 }
               }
             }
           }
         },
-        "reductionSequence": {"type": "array", "items": {"type": "string"}},
-        "fixationStrategy": {"type": "array", "items": {"type": "string"}},
-        "intraopChecks": {"type": "array", "items": {"type": "string"}},
+        "reductionSequence": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "fixationStrategy": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "intraopChecks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "imagingChecklist": {
           "type": "object",
           "additionalProperties": true,
-          "required": ["intraop", "postopBaseline", "followUp", "mnemonic"],
+          "required": [
+            "intraop",
+            "postopBaseline",
+            "followUp",
+            "mnemonic"
+          ],
           "properties": {
             "intraop": {
               "type": "array",
               "items": {
                 "type": "object",
                 "additionalProperties": true,
-                "required": ["view", "purpose", "lookFor", "pitfalls"],
+                "required": [
+                  "view",
+                  "purpose",
+                  "lookFor",
+                  "pitfalls"
+                ],
                 "properties": {
-                  "view": {"type": "string"},
-                  "purpose": {"type": "string"},
-                  "lookFor": {"type": "array", "items": {"type": "string"}},
-                  "pitfalls": {"type": "array", "items": {"type": "string"}}
+                  "view": {
+                    "type": "string"
+                  },
+                  "purpose": {
+                    "type": "string"
+                  },
+                  "lookFor": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "pitfalls": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
                 }
               }
             },
-            "postopBaseline": {"type": "array", "items": {"type": "string"}},
-            "followUp": {"type": "array", "items": {"type": "string"}},
-            "mnemonic": {"type": "string"},
-            "whenToEscalateImaging": {"type": "array", "items": {"type": "string"}}
+            "postopBaseline": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "followUp": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "mnemonic": {
+              "type": "string"
+            },
+            "whenToEscalateImaging": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           }
         },
         "failureModes": {
@@ -265,45 +709,127 @@
           "items": {
             "type": "object",
             "additionalProperties": true,
-            "required": ["problem", "whyItHappens", "prevention", "bailout"],
+            "required": [
+              "problem",
+              "whyItHappens",
+              "prevention",
+              "bailout"
+            ],
             "properties": {
-              "problem": {"type": "string"},
-              "whyItHappens": {"type": "string"},
-              "prevention": {"type": "string"},
-              "bailout": {"type": "string"}
+              "problem": {
+                "type": "string"
+              },
+              "whyItHappens": {
+                "type": "string"
+              },
+              "prevention": {
+                "type": "string"
+              },
+              "bailout": {
+                "type": "string"
+              }
             }
           }
         },
         "postopFramework": {
           "type": "object",
           "additionalProperties": true,
-          "required": ["monitoring", "rom", "weightBearing", "followUp"],
+          "required": [
+            "monitoring",
+            "rom",
+            "weightBearing",
+            "followUp"
+          ],
           "properties": {
-            "monitoring": {"type": "array", "items": {"type": "string"}},
-            "rom": {"type": "array", "items": {"type": "string"}},
-            "weightBearing": {"type": "array", "items": {"type": "string"}},
-            "followUp": {"type": "array", "items": {"type": "string"}}
+            "monitoring": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "rom": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "weightBearing": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "followUp": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           }
         },
-        "localPracticeNote": {"type": "string"},
-        "evidenceUpdatedAt": {"type": "string"},
-        "reviewStatus": {"type": "string", "enum": ["draft"]},
-        "contentStatus": {"type": "string", "enum": ["ai_draft"]}
+        "localPracticeNote": {
+          "type": "string"
+        },
+        "evidenceUpdatedAt": {
+          "type": "string"
+        },
+        "reviewStatus": {
+          "type": "string",
+          "enum": [
+            "draft"
+          ]
+        },
+        "contentStatus": {
+          "type": "string",
+          "enum": [
+            "ai_draft"
+          ]
+        }
       }
     }
   },
   "allOf": [
     {
-      "if": {"properties": {"action": {"const": "create_patient_guide"}}},
-      "then": {"required": ["patientGuide"]}
+      "if": {
+        "properties": {
+          "action": {
+            "const": "create_patient_guide"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "patientGuide"
+        ]
+      }
     },
     {
-      "if": {"properties": {"action": {"const": "create_rehab_contract"}}},
-      "then": {"required": ["rehabContract"]}
+      "if": {
+        "properties": {
+          "action": {
+            "const": "create_rehab_contract"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "rehabContract"
+        ]
+      }
     },
     {
-      "if": {"properties": {"action": {"const": "create_procedure"}}},
-      "then": {"required": ["procedure"]}
+      "if": {
+        "properties": {
+          "action": {
+            "const": "create_procedure"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "procedure"
+        ]
+      }
     }
   ]
 }
