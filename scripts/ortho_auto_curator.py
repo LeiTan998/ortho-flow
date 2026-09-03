@@ -55,7 +55,7 @@ def supabase_headers() -> dict[str, str]:
     return {
         "apikey": need_env("SUPABASE_SECRET_KEY"),
         "Content-Type": "application/json",
-        "User-Agent": "orthoflow-auto-curator/3.1",
+        "User-Agent": "orthoflow-auto-curator/3.2",
     }
 
 
@@ -272,7 +272,7 @@ def common_rules(disease: dict[str, Any], content_type: str) -> str:
 
 def build_patient_prompt(disease: dict[str, Any]) -> str:
     return f"""
-你是 OrthoFlow Patient Guide V3.1 患者端内容编辑器。
+你是 OrthoFlow Patient Guide V3.2 患者端内容编辑器。
 目标不是写百科、教科书或康复方案，而是让一个焦虑的普通患者在 10 秒内先抓住重点。
 
 患者最想知道四件事：
@@ -309,10 +309,13 @@ surgeryDecision（我需要手术吗？）：
 - 不能写“某分型=某手术”“看到某一个征象就必须手术”。
 
 recovery（我什么时候能恢复？）：
-- 只解释恢复由哪些条件控制，并给出从保护期→功能恢复→回归工作/运动的大阶段。
-- 最多写 3–5 个恢复要点。
-- 不在这里详细列脱拐、负重、跑步、深蹲、驾驶、游泳等逐项时间表；这些留给 Rehab Contract。
-- 强调“时间只是一个条件”，还要结合组织/固定稳定性、疼痛肿胀、活动度、力量控制和风险。
+- Patient Guide 不是康复处方。只允许保留 2–3 个“大阶段”，默认优先 3 个：①保护/稳定，②恢复基本功能，③回归较高需求活动。
+- 每个 milestone 只回答两件事：“这一阶段主要目标是什么”“进入下一阶段主要看什么”。不要写训练菜单。
+- whatUsuallyMatters 必须是患者理解层面的 1–2 句话；禁止展开具体肌群训练、动作次数、支具摘戴方案、负重等级、屈伸角度、跑跳测试、专项动作等。
+- timingNote 原则上留空；只有必须提醒“以术式/固定方式/主治医师要求为准”时才写一句，不得给固定天数、周数或月份。
+- 不列脱拐、负重、跑步、深蹲、驾驶、游泳、开车、上班、球类等逐项时间表；这些全部留给 Rehab Contract。
+- recovery.plainAnswer 控制为 2–4 句：说明恢复不是按日历自动解锁，并点出稳定性/组织愈合、症状、功能、风险。
+- unlockPrinciple 最多 3 条；recoveryNotGoingWell 最多 4 条。
 
 redFlags：
 - 只列真正值得及时就医/复诊的危险信号。
@@ -321,6 +324,7 @@ redFlags：
 visitPrep（下次复诊我该问什么？）：
 - 优先给 3–5 个患者可以直接拿去问医生的问题。
 - 问题应帮助患者澄清：目前是否稳定/严重、保守还是手术、下一阶段目标、复查依据、哪些情况需提前复诊。
+- visitPrep 是患者端唯一主展示的“问医生什么”区域。surgeryDecision.questionsForDoctor 仍需满足 schema，但必须压缩为 2–3 条、不要和 visitPrep 逐句重复，前端默认不重复展示。
 - 如 schema 还包含“带什么资料”，只保留最必要的完整影像、报告、既往手术/治疗资料。
 
 动作规则：
@@ -434,7 +438,7 @@ def deepseek_structured(prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
                 headers={
                     "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json",
-                    "User-Agent": "orthoflow-auto-curator/3.1",
+                    "User-Agent": "orthoflow-auto-curator/3.2",
                 },
                 json=body,
                 timeout=240,
@@ -473,16 +477,17 @@ def deepseek_structured(prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
 def review_and_revise(first: dict[str, Any], disease: dict[str, Any], content_type: str, schema: dict[str, Any]) -> dict[str, Any]:
     if content_type == "patient_guide":
         focus = """
-重点按 Patient Guide V3.1 重新审稿，而不是只做医学纠错：
+重点按 Patient Guide V3.2 重新审稿，而不是只做医学纠错：
 1. 第一屏是否能快速回答“严重吗 / 要手术吗 / 恢复怎么看”，而不是先写百科背景。
 2. 普通患者是否能理解；删除不必要术语、长句、同义重复和教材式解释。
-3. severity / surgeryDecision / recovery 每部分优先压到 3–5 个核心要点。
+3. severity / surgeryDecision 每部分优先压到 3–5 个核心要点；避免 summary、plainAnswer、列表反复说同一句话。
 4. 删除 Patient Guide 中不必要的固定周数、天数、毫米、角度、百分比和伪精确阈值；确有必要但不能核证的数字放 reviewFlags。
-5. recovery 只保留恢复原则和大阶段；详细负重、脱拐、驾驶、跑步、运动回归必须留给 Rehab Contract。
-6. 不把影像截图、分型或单个指标当最终诊断，也不把某分型直接等同手术。
-7. 不制造焦虑，不承诺恢复结果。redFlags 只留真正需要及时就医/复诊的 3–5 类信号。
-8. visitPrep 优先变成患者可以直接问医生的 3–5 个问题。
-9. patient_guide 不得因为存在多个术式而返回 needs_human_selection；这是 Procedure 阶段问题。
+5. recovery 必须执行“最小化”：最多 3 个 milestones；每个只写阶段目标和解锁条件，不得写训练菜单。whatUsuallyMatters 1–2 句；timingNote 默认空。详细负重、支具、屈伸角度、肌群训练、脱拐、驾驶、跑步、运动专项必须留给 Rehab Contract。
+6. recovery.plainAnswer 2–4 句，unlockPrinciple 最多 3 条，recoveryNotGoingWell 最多 4 条。
+7. 不把影像截图、分型或单个指标当最终诊断，也不把某分型直接等同手术。
+8. 不制造焦虑，不承诺恢复结果。redFlags 只留真正需要及时就医/复诊的 3–5 类信号。
+9. visitPrep 是前端主要“问医生什么”区域，保留 3–5 条；surgeryDecision.questionsForDoctor 压到 2–3 条且不要逐句重复。
+10. patient_guide 不得因为存在多个术式而返回 needs_human_selection；这是 Procedure 阶段问题。
 """
     elif content_type == "rehab_contract":
         focus = """
@@ -535,7 +540,7 @@ def normalize_and_validate(result: dict[str, Any], disease: dict[str, Any], cont
         payload = result[payload_key]
         payload["reviewStatus"] = "draft"
         payload["contentStatus"] = "ai_draft"
-        payload["autoCuratorVersion"] = "auto-curator-v3.1-patient-quality"
+        payload["autoCuratorVersion"] = "auto-curator-v3.2-patient-minimal"
         payload["autoCuratorModel"] = MODEL
         payload["generatedAt"] = datetime.now(timezone.utc).isoformat()
 
