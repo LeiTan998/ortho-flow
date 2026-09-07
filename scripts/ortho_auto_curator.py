@@ -38,6 +38,7 @@ OUTPUT_DIR = ROOT / "autocurator_output"
 
 MODEL = os.getenv("AUTOCURATOR_MODEL", "deepseek-v4-flash")
 PATIENT_VERSION = "auto-curator-v3.2.2-treatment-path-safety"
+REHAB_VERSION = "auto-curator-rehab-v3.1-disease-path-safety"
 API_USAGE: dict[str, int] = defaultdict(int)
 CONTENT_PRIORITY = {"patient_guide": 0, "rehab_contract": 1, "procedure": 2}
 CREATE_ACTION = {
@@ -169,15 +170,15 @@ def has_patient_guide(disease: dict[str, Any]) -> bool:
 
 
 def has_rehab_contract(disease: dict[str, Any], procedures: list[dict[str, Any]]) -> bool:
-    contract = disease.get("rehabContract")
-    if isinstance(contract, dict) and bool(contract):
-        return True
-    for proc in related_procedures(disease.get("id", ""), procedures):
-        pdata = proc.get("data") or {}
-        contract = pdata.get("rehabContract")
-        if isinstance(contract, dict) and bool(contract):
-            return True
-    return False
+    """Disease-level Rehab is intentionally separate from Procedure rehabContract.
+
+    diseases.data.diseaseRehabContract = disease-level common recovery logic
+    procedures.data.rehabContract = procedure-specific postoperative rehab
+
+    A Procedure rehabContract must NOT make a disease look complete for the disease Rehab phase.
+    """
+    contract = disease.get("diseaseRehabContract")
+    return isinstance(contract, dict) and bool(contract)
 
 
 def pending_pairs() -> set[tuple[str, str]]:
@@ -261,6 +262,7 @@ def select_phase_tasks(all_tasks: list[dict[str, Any]], mode: str) -> tuple[str 
         "patient_scan": "patient_guide",
         "patient_full": "patient_guide",
         "rehab_scan": "rehab_contract",
+        "rehab_test": "rehab_contract",
         "procedure_scan": "procedure",
     }.get(mode)
 
@@ -304,6 +306,30 @@ def validate_patient_full_queue() -> int:
     print(f"Patient full queue guard: OK — final-version pending drafts already present: {final_rows}")
     return final_rows
 
+
+
+def rehab_test_tasks(diseases: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return five cross-category disease Rehab blind-test tasks in fixed order."""
+    targets = [
+        ("胫骨平台骨折", ["胫骨平台"]),
+        ("肩袖损伤", ["肩袖"]),
+        ("腰椎间盘突出症", ["腰椎间盘突出"]),
+        ("膝关节骨关节炎", ["膝关节骨关节炎", "膝骨关节炎"]),
+        ("踝关节外侧韧带损伤（踝扭伤）", ["踝关节外侧韧带", "踝扭伤"]),
+    ]
+    found: list[dict[str, Any]] = []
+    converted = [compact_disease(disease_from_row(row)) for row in diseases]
+    for display, needles in targets:
+        match = None
+        for d in converted:
+            hay = " ".join(str(d.get(k, "")) for k in ("id", "name", "englishName", "searchKeywords")).lower()
+            if any(n.lower() in hay for n in needles):
+                match = d
+                break
+        if not match:
+            raise RuntimeError(f"Rehab blind test disease not found: {display}")
+        found.append({"disease": match, "contentType": "rehab_contract", "viewCount": int(match.get("viewCount") or 0)})
+    return found
 
 def find_pfna_disease(diseases: list[dict[str, Any]]) -> dict[str, Any]:
     needles = ["股骨转子间", "股骨粗隆间", "intertrochanteric", "pertrochanteric"]
@@ -409,22 +435,72 @@ visitPrep（下次复诊我该问什么？）：
 
 def build_rehab_prompt(disease: dict[str, Any]) -> str:
     return f"""
-你是 OrthoFlow 康复内容编辑器。你的任务是生成“功能回归 / Return to Activity”草稿，而不是固定时间表。
+你是 OrthoFlow Disease Rehab Contract V3.1 内容编辑器。
+你的任务是生成“疾病级功能回归合同”，不是某个术式的术后医嘱，也不是固定周数时间表。
 
 {common_rules(disease, 'rehab_contract')}
 
-现有疾病资料：
+当前疾病资料（只作为背景，不要照抄其中绝对化旧句）：
 {json.dumps(disease, ensure_ascii=False, indent=2)}
 
-必须使用五把锁，且 id 固定为：time, tissue, symptoms, function, risk。
-五把锁分别表达：时间窗口、组织/固定或生物学条件、疼痛肿胀等症状、力量/活动度/控制等功能、再受伤/并发症/跌倒等风险。
+===== Disease Rehab Contract V3.1 Gold Standard =====
 
-activities：
-- 至少 6 项，优先覆盖该疾病患者真正会问的日常活动、工作和运动。
-- typicalWindow 只允许写“常见阶段/大致窗口/需结合术式或固定方式”，不要把周数当作自动通行证。
-- unlockWhen 必须写可观察条件；holdIf 写暂停升级的信号。
-- 如果该疾病几乎没有可定义的康复/活动回归路径，action=not_applicable，说明原因，不要硬填。
-- rehabContract.reviewStatus=draft，contentStatus=ai_draft。
+【数据边界】
+- 本次输出字段必须是 diseaseRehabContract。
+- diseaseRehabContract 属于 diseases.data，表达“这个疾病在不同治疗路径之间共同成立的功能回归逻辑”。
+- procedures.data.rehabContract 是具体手术后的康复合同，两者绝不能混为一谈。
+- 不因为数据库里某个 Procedure 已有 rehabContract，就认为疾病级 Rehab 已完成。
+
+【治疗路径隔离：硬规则】
+- 不得默认患者已经手术、一定保守、一定打石膏、一定戴支具/吊带、一定有内固定/假体、一定卧床或一定不负重。
+- 同一疾病若存在保守、内固定、关节置换、修复、重建等多条路径，只写所有合理路径都成立的共同“解锁条件”。
+- 如果某项活动的开放高度依赖具体治疗方式，必须写成条件句，例如：“在主治团队确认当前治疗方式允许后，再逐步增加……”。
+- 禁止把“第几周”“几个月”“固定到某天”写成自动解锁规则。typicalWindow 默认应为空字符串；只有确有患者教育价值且不会误导时，才可写非常宽泛且明确标注“仅参考、治疗路径优先”的时间窗，并加入 reviewFlag。
+- 禁止把单一 X 线骨痂、MRI 信号、某个角度或某个数值作为负重、脱拐、跑跳、驾驶、上班的唯一开关。
+- 禁止疾病级处方化语句，例如“必须完全不负重”“必须戴支具 X 周”“术后第 X 周开始……”；这些属于具体治疗路径或 Procedure Rehab。
+
+【五把锁】
+locks 必须正好 5 个，id 固定且不重复：
+1. time：时间窗口只作为背景，不单独放行。
+2. tissue：组织、骨折/修复/固定或结构稳定性是否允许。
+3. symptoms：疼痛、肿胀、夜间症状、神经症状等是否可控。
+4. function：活动度、力量、控制、步态、耐力等是否达到当前活动要求。
+5. risk：跌倒、再损伤、感染、血栓、神经血管、复发等风险是否可接受。
+每个 lock 的 question 必须是患者/医生都能理解的“解锁问题”，不要写教科书定义。
+
+【活动卡】
+activities 目标是“患者真正想恢复什么”，建议 6–10 项，并按疾病相关性选择。可从以下池中选择或替换：
+- 日常活动/基本自理
+- 走路或上肢日常使用
+- 负重（仅在该疾病相关时）
+- 辅助器具/支具减量（仅在适用时）
+- 楼梯/蹲起/坐站
+- 驾驶
+- 久坐/办公室工作
+- 体力工作
+- 骑车/游泳等低冲击运动
+- 力量训练
+- 跑步/跳跃/球类或专项运动
+脊柱、上肢、儿童、感染、肿瘤等疾病不要硬塞“负重/脱拐”；换成真正相关的功能。
+
+每个 activity：
+- goal：一句话说明患者想恢复的功能。
+- unlockWhen：至少 2 条，优先覆盖 tissue + symptoms + function + risk 中真正相关的条件；不要只写“医生同意”。
+- holdIf：出现哪些变化应暂缓、退阶或复诊。
+- notes：只写路径差异或必要解释，不写训练处方。
+- typicalWindow：默认空字符串。
+
+【warningSigns】
+- 3–6 条与该疾病相关、需要及时就医/提前复诊的信号。
+- 不制造恐慌，不把一般酸痛都写成急症。
+- 急性神经血管问题、感染、进行性神经功能下降等如适用，应清楚提示。
+
+【输出要求】
+- action=create_rehab_contract。
+- diseaseRehabContract.reviewStatus=draft。
+- diseaseRehabContract.contentStatus=ai_draft。
+- 不输出 procedure rehab。
+- 对任何需要本院流程/术式/固定方式/具体阈值核对的内容，放入 reviewFlags。
 """.strip()
 
 
@@ -567,7 +643,15 @@ def review_and_revise(first: dict[str, Any], disease: dict[str, Any], content_ty
 """
     elif content_type == "rehab_contract":
         focus = """
-重点检查：是否真的使用五把锁；是否把到了某周自动解锁；是否忽略疼痛肿胀、影像/组织愈合、力量控制与风险；活动项目是否与疾病相关。
+重点检查 Disease Rehab Contract V3.1：
+- 是否正好使用 time/tissue/symptoms/function/risk 五把锁且不重复；
+- 是否把疾病级 Rehab 错写成“术后/保守治疗”的单一路径处方；
+- 是否默认石膏、支具、吊带、内固定、假体、卧床或不负重；
+- 是否出现“第几周/几个月自动解锁”或把单一影像征象当作活动开关；
+- activities 是否真的是患者功能目标，并根据骨折/上肢/脊柱/退变/运动损伤等疾病类型调整，而不是硬塞统一清单；
+- unlockWhen 是否体现组织稳定 + 症状 + 功能 + 风险，而不是只有“医生允许”；
+- typicalWindow 应默认空字符串；如出现时间窗，必须判断是否会制造伪精确并加入 reviewFlag；
+- 是否把 Procedure-specific Rehab 与 diseaseRehabContract 混淆。
 """
     else:
         focus = """
@@ -608,7 +692,7 @@ def normalize_and_validate(result: dict[str, Any], disease: dict[str, Any], cont
 
     payload_key = {
         "patient_guide": "patientGuide",
-        "rehab_contract": "rehabContract",
+        "rehab_contract": "diseaseRehabContract",
         "procedure": "procedure",
     }[content_type]
 
@@ -616,7 +700,7 @@ def normalize_and_validate(result: dict[str, Any], disease: dict[str, Any], cont
         payload = result[payload_key]
         payload["reviewStatus"] = "draft"
         payload["contentStatus"] = "ai_draft"
-        payload["autoCuratorVersion"] = PATIENT_VERSION if content_type == "patient_guide" else "auto-curator-v3.2.2-treatment-path-safety"
+        payload["autoCuratorVersion"] = PATIENT_VERSION if content_type == "patient_guide" else (REHAB_VERSION if content_type == "rehab_contract" else "auto-curator-v3.2.2-treatment-path-safety")
         payload["autoCuratorModel"] = MODEL
         payload["generatedAt"] = datetime.now(timezone.utc).isoformat()
 
@@ -643,7 +727,7 @@ def build_prompt(content_type: str, disease: dict[str, Any], procedures: list[di
 def payload_for(result: dict[str, Any], content_type: str) -> dict[str, Any] | None:
     key = {
         "patient_guide": "patientGuide",
-        "rehab_contract": "rehabContract",
+        "rehab_contract": "diseaseRehabContract",
         "procedure": "procedure",
     }[content_type]
     if result.get("action") == CREATE_ACTION[content_type]:
@@ -700,6 +784,8 @@ def self_test() -> None:
     assert concrete_procedure_ids(fake_disease, []) == []
     assert not has_patient_guide(fake_disease)
     assert not has_rehab_contract(fake_disease, [])
+    assert has_rehab_contract({"id": "x", "diseaseRehabContract": {"title": "x"}}, [])
+    assert not has_rehab_contract({"id": "x"}, [{"data": {"rehabContract": {"title": "procedure only"}}}])
     assert is_placeholder("fake_surgery_pro", "fake")
     phase, phase_tasks = select_phase_tasks([
         {"disease": {"id": "b", "name": "乙"}, "contentType": "rehab_contract", "viewCount": 999},
@@ -715,14 +801,14 @@ def self_test() -> None:
             "reason": "self test",
             "reviewFlags": [],
         }, schema=schema)
-    print("SELF TEST OK — V3.2.2 full-library runner")
+    print("SELF TEST OK — Patient V3.2.2 + Disease Rehab V3.1")
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--mode",
-        choices=["content_scan", "patient_scan", "patient_full", "rehab_scan", "procedure_scan", "pfna_test"],
+        choices=["content_scan", "patient_scan", "patient_full", "rehab_scan", "rehab_test", "procedure_scan", "pfna_test"],
         default="content_scan",
     )
     parser.add_argument("--save-draft", action="store_true")
@@ -750,6 +836,10 @@ def main() -> int:
             disease = find_pfna_disease(diseases)
             tasks = [{"disease": disease, "contentType": "procedure", "viewCount": disease.get("viewCount", 0), "pfnaTest": True}]
             max_tasks = 1
+        elif args.mode == "rehab_test":
+            tasks = rehab_test_tasks(diseases)
+            max_tasks = 5
+            print("REHAB V3.1 BLIND TEST MODE: ON — fixed five cross-category diseases")
         else:
             if args.mode == "patient_full":
                 validate_patient_full_queue()

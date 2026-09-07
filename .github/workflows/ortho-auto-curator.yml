@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "V3：单批测试，或一键跑完整个 Patient Guide 全库"
+        description: "Patient V3.2.2 / Disease Rehab V3.1：测试与分阶段生成"
         required: true
         type: choice
         default: patient_scan
@@ -13,6 +13,7 @@ on:
           - patient_full
           - content_scan
           - rehab_scan
+          - rehab_test
           - procedure_scan
           - pfna_test
       save_draft:

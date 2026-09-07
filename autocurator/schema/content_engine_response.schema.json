@@ -245,123 +245,6 @@
         }
       }
     },
-    "rehabContract": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "title",
-        "principle",
-        "locks",
-        "activities",
-        "warningSigns",
-        "reviewStatus",
-        "contentStatus"
-      ],
-      "properties": {
-        "title": {
-          "type": "string"
-        },
-        "principle": {
-          "type": "string"
-        },
-        "locks": {
-          "type": "array",
-          "minItems": 5,
-          "maxItems": 5,
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "id",
-              "name",
-              "question"
-            ],
-            "properties": {
-              "id": {
-                "type": "string",
-                "enum": [
-                  "time",
-                  "tissue",
-                  "symptoms",
-                  "function",
-                  "risk"
-                ]
-              },
-              "name": {
-                "type": "string"
-              },
-              "question": {
-                "type": "string"
-              }
-            }
-          }
-        },
-        "activities": {
-          "type": "array",
-          "minItems": 6,
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "id",
-              "name",
-              "goal",
-              "unlockWhen",
-              "holdIf"
-            ],
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "name": {
-                "type": "string"
-              },
-              "goal": {
-                "type": "string"
-              },
-              "typicalWindow": {
-                "type": "string"
-              },
-              "unlockWhen": {
-                "type": "array",
-                "minItems": 2,
-                "items": {
-                  "type": "string"
-                }
-              },
-              "holdIf": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "notes": {
-                "type": "string"
-              }
-            }
-          }
-        },
-        "warningSigns": {
-          "type": "array",
-          "minItems": 3,
-          "items": {
-            "type": "string"
-          }
-        },
-        "reviewStatus": {
-          "type": "string",
-          "enum": [
-            "draft"
-          ]
-        },
-        "contentStatus": {
-          "type": "string",
-          "enum": [
-            "ai_draft"
-          ]
-        }
-      }
-    },
     "procedure": {
       "type": "object",
       "additionalProperties": true,
@@ -786,6 +669,123 @@
           ]
         }
       }
+    },
+    "diseaseRehabContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "title",
+        "principle",
+        "locks",
+        "activities",
+        "warningSigns",
+        "reviewStatus",
+        "contentStatus"
+      ],
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "principle": {
+          "type": "string"
+        },
+        "locks": {
+          "type": "array",
+          "minItems": 5,
+          "maxItems": 5,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "name",
+              "question"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "enum": [
+                  "time",
+                  "tissue",
+                  "symptoms",
+                  "function",
+                  "risk"
+                ]
+              },
+              "name": {
+                "type": "string"
+              },
+              "question": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "activities": {
+          "type": "array",
+          "minItems": 6,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "name",
+              "goal",
+              "unlockWhen",
+              "holdIf"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "goal": {
+                "type": "string"
+              },
+              "typicalWindow": {
+                "type": "string"
+              },
+              "unlockWhen": {
+                "type": "array",
+                "minItems": 2,
+                "items": {
+                  "type": "string"
+                }
+              },
+              "holdIf": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "notes": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "warningSigns": {
+          "type": "array",
+          "minItems": 3,
+          "items": {
+            "type": "string"
+          }
+        },
+        "reviewStatus": {
+          "type": "string",
+          "enum": [
+            "draft"
+          ]
+        },
+        "contentStatus": {
+          "type": "string",
+          "enum": [
+            "ai_draft"
+          ]
+        }
+      }
     }
   },
   "allOf": [
@@ -813,7 +813,7 @@
       },
       "then": {
         "required": [
-          "rehabContract"
+          "diseaseRehabContract"
         ]
       }
     },
