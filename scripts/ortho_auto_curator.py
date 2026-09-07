@@ -38,7 +38,7 @@ OUTPUT_DIR = ROOT / "autocurator_output"
 
 MODEL = os.getenv("AUTOCURATOR_MODEL", "deepseek-v4-flash")
 PATIENT_VERSION = "auto-curator-v3.2.2-treatment-path-safety"
-REHAB_VERSION = "auto-curator-rehab-v3.1-disease-path-safety"
+REHAB_VERSION = "auto-curator-rehab-v3.1.1-no-pseudo-precision"
 API_USAGE: dict[str, int] = defaultdict(int)
 CONTENT_PRIORITY = {"patient_guide": 0, "rehab_contract": 1, "procedure": 2}
 CREATE_ACTION = {
@@ -458,6 +458,10 @@ def build_rehab_prompt(disease: dict[str, Any]) -> str:
 - 禁止把“第几周”“几个月”“固定到某天”写成自动解锁规则。typicalWindow 默认应为空字符串；只有确有患者教育价值且不会误导时，才可写非常宽泛且明确标注“仅参考、治疗路径优先”的时间窗，并加入 reviewFlag。
 - 禁止把单一 X 线骨痂、MRI 信号、某个角度或某个数值作为负重、脱拐、跑跳、驾驶、上班的唯一开关。
 - 禁止疾病级处方化语句，例如“必须完全不负重”“必须戴支具 X 周”“术后第 X 周开始……”；这些属于具体治疗路径或 Procedure Rehab。
+- 【V3.1.1 伪精确禁令】疾病级活动解锁条件不得出现具体负重百分比（如 25%/50%/100%）、固定分钟/小时/天/周/月、固定步行距离、固定次数/组数、固定重量、固定角度或固定疼痛分值作为放行标准；把它们改写成“症状不过度反跳、功能质量稳定、结构/治疗路径允许、风险可接受”等定性条件。
+- typicalWindow 在 Disease Rehab Contract 中一律输出空字符串，不得填写任何时间范围。
+- 不要用“连续步行 X 分钟”“症状在 24/48 小时内恢复”“完成 X 次动作”“负重达到 X%”这类看似客观但未经个体化验证的阈值。
+- 疾病级正文尽量避免频繁使用“术后/保守治疗后”等单一路径措辞；如必须提醒路径差异，只能概括为“具体治疗方式可能附带额外限制，以治疗团队和对应 Procedure Rehab 为准”。
 
 【五把锁】
 locks 必须正好 5 个，id 固定且不重复：
@@ -650,7 +654,10 @@ def review_and_revise(first: dict[str, Any], disease: dict[str, Any], content_ty
 - 是否出现“第几周/几个月自动解锁”或把单一影像征象当作活动开关；
 - activities 是否真的是患者功能目标，并根据骨折/上肢/脊柱/退变/运动损伤等疾病类型调整，而不是硬塞统一清单；
 - unlockWhen 是否体现组织稳定 + 症状 + 功能 + 风险，而不是只有“医生允许”；
-- typicalWindow 应默认空字符串；如出现时间窗，必须判断是否会制造伪精确并加入 reviewFlag；
+- typicalWindow 必须全部为空字符串；发现任何非空值都删除，不再保留“参考时间窗”；
+- 删除具体负重百分比、固定分钟/小时/天/周/月、固定距离、固定次数/组数、固定重量、固定角度、固定疼痛分值等作为活动解锁/退阶条件的伪精确阈值；
+- 特别检查并改写类似“25%/50%/100%负重”“连续步行15–20分钟”“24小时内恢复”“完成10次”“屈曲达到90°”等句式。不要仅仅加 reviewFlag，应该从疾病级正文中移除数字阈值；
+- 若出现大量“术后/保守治疗后/固定后”措辞，改写为治疗路径中立的共同逻辑；路径差异只保留一句原则性提醒；
 - 是否把 Procedure-specific Rehab 与 diseaseRehabContract 混淆。
 """
     else:
@@ -801,7 +808,7 @@ def self_test() -> None:
             "reason": "self test",
             "reviewFlags": [],
         }, schema=schema)
-    print("SELF TEST OK — Patient V3.2.2 + Disease Rehab V3.1")
+    print("SELF TEST OK — Patient V3.2.2 + Disease Rehab V3.1.1")
 
 
 def main() -> int:
