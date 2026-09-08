@@ -37,6 +37,7 @@ SCHEMA_PATH = ROOT / "autocurator" / "schema" / "content_engine_response.schema.
 OUTPUT_DIR = ROOT / "autocurator_output"
 
 MODEL = os.getenv("AUTOCURATOR_MODEL", "deepseek-v4-flash")
+DEEPSEEK_REQUEST_TIMEOUT = int(os.getenv("DEEPSEEK_REQUEST_TIMEOUT", "180"))
 PATIENT_VERSION = "auto-curator-v3.2.2-treatment-path-safety"
 REHAB_VERSION = "auto-curator-rehab-v3.1.1-no-pseudo-precision"
 API_USAGE: dict[str, int] = defaultdict(int)
@@ -585,6 +586,10 @@ def deepseek_structured(prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
     last_error: Exception | None = None
     for attempt in range(3):
         try:
+            print(
+                f"DeepSeek request attempt {attempt + 1}/3 — timeout={DEEPSEEK_REQUEST_TIMEOUT}s",
+                flush=True,
+            )
             r = requests.post(
                 url,
                 headers={
@@ -593,7 +598,11 @@ def deepseek_structured(prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
                     "User-Agent": "orthoflow-auto-curator/3.2.2",
                 },
                 json=body,
-                timeout=240,
+                timeout=(20, DEEPSEEK_REQUEST_TIMEOUT),
+            )
+            print(
+                f"DeepSeek response received — status={r.status_code}, attempt={attempt + 1}/3",
+                flush=True,
             )
             if r.status_code >= 400:
                 raise RuntimeError(f"DeepSeek API failed {r.status_code}: {r.text[:1800]}")
@@ -617,10 +626,14 @@ def deepseek_structured(prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
             result = json.loads(text)
             validate(instance=result, schema=schema)
             return result
-        except (RuntimeError, json.JSONDecodeError, ValidationError) as exc:
+        except (requests.RequestException, RuntimeError, json.JSONDecodeError, ValidationError) as exc:
             last_error = exc
             if attempt < 2:
-                print(f"DeepSeek structured output retry {attempt + 1}/2: {exc}", file=sys.stderr)
+                print(
+                    f"DeepSeek structured output retry {attempt + 1}/2: {exc}",
+                    file=sys.stderr,
+                    flush=True,
+                )
                 continue
             raise RuntimeError(f"DeepSeek structured output failed after 3 attempts: {exc}") from exc
 
@@ -935,7 +948,8 @@ def main() -> int:
                 print(f"Continue batch after: {action}")
 
             except Exception as exc:
-                if args.mode != "patient_full" or is_fatal_full_run_error(exc):
+                full_library_mode = args.mode in ("patient_full", "rehab_scan")
+                if not full_library_mode or is_fatal_full_run_error(exc):
                     raise
                 error_text = str(exc)[:1200]
                 failure = {
@@ -951,8 +965,15 @@ def main() -> int:
                     "action": "error",
                     "error": error_text,
                 })
-                print(f"::warning::Skipped after per-disease failure: {disease.get('name')} — {error_text}", file=sys.stderr)
-                print("Continuing full-library run; rerun patient_full later to retry missing diseases.")
+                print(
+                    f"::warning::Skipped after per-disease failure: {disease.get('name')} — {error_text}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                print(
+                    f"Continuing full-library run; rerun {args.mode} later to retry missing diseases.",
+                    flush=True,
+                )
 
         if failures:
             outcome = "partial_success"
@@ -974,11 +995,16 @@ def main() -> int:
         print(f"\nV3 scheduler summary: processed={len(decisions)}, created={created_count}, failed={len(failures)}")
         print("DeepSeek usage totals: " + json.dumps(usage, ensure_ascii=False, sort_keys=True))
         if failures:
-            print(f"::warning::Full run completed with {len(failures)} disease-level failures. Rerun patient_full to retry them.")
-        elif args.mode == "patient_full" and len(selected_tasks) < len(tasks):
-            print(f"::warning::Full run hit task cap {max_tasks}; rerun patient_full for remaining diseases.")
+            print(
+                f"::warning::Full run completed with {len(failures)} disease-level failures. "
+                f"Rerun {args.mode} to retry them."
+            )
+        elif args.mode in ("patient_full", "rehab_scan") and len(selected_tasks) < len(tasks):
+            print(f"::warning::Full run hit task cap {max_tasks}; rerun {args.mode} for remaining diseases.")
         elif args.mode == "patient_full":
             print("FULL PATIENT LIBRARY PASS COMPLETE — rerun once to confirm 'No eligible V3 content gap found.'")
+        elif args.mode == "rehab_scan":
+            print("FULL DISEASE REHAB PASS COMPLETE — rerun once to confirm 'No eligible V3 content gap found.'")
         return 0
 
     except ValidationError as exc:
