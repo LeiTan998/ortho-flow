@@ -852,9 +852,12 @@ def main() -> int:
                 validate_patient_full_queue()
             all_tasks = task_candidates(diseases, procedures)
             phase, tasks = select_phase_tasks(all_tasks, args.mode)
-            if args.mode == "patient_full":
+            if args.mode in ("patient_full", "rehab_scan"):
                 max_tasks = int(os.getenv("AUTOCURATOR_FULL_MAX_TASKS", "9999"))
-                print("FULL PATIENT LIBRARY MODE: ON")
+                if args.mode == "patient_full":
+                    print("FULL PATIENT LIBRARY MODE: ON")
+                else:
+                    print("FULL DISEASE REHAB LIBRARY MODE: ON")
             else:
                 max_tasks = int(os.getenv("AUTOCURATOR_MAX_TASKS", "5"))
             if phase:
