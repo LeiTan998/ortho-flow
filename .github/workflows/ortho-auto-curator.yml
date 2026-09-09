@@ -14,10 +14,11 @@ on:
           - content_scan
           - rehab_scan
           - rehab_test
+          - rehab_cleanup
           - procedure_scan
           - pfna_test
       save_draft:
-        description: "是否把结果保存到 Supabase 待审核队列；patient_full 必须勾选"
+        description: "是否把结果保存到 Supabase 待审核队列；patient_full / rehab_cleanup 必须勾选"
         required: true
         type: boolean
         default: true

@@ -40,6 +40,11 @@ MODEL = os.getenv("AUTOCURATOR_MODEL", "deepseek-v4-flash")
 DEEPSEEK_REQUEST_TIMEOUT = int(os.getenv("DEEPSEEK_REQUEST_TIMEOUT", "180"))
 PATIENT_VERSION = "auto-curator-v3.2.2-treatment-path-safety"
 REHAB_VERSION = "auto-curator-rehab-v3.1.1-no-pseudo-precision"
+REHAB_CLEANUP_VERSION = "semantic-cleanup-v3.1.2-relative-time-gates"
+REHAB_HOLD_IDS = {"developmental_dysplasia_hip", "ankylosing_spondylitis", "osteosarcoma"}
+RELATIVE_TIME_GATE_RE = re.compile(
+    r"次日|第二天|第二日|次晨|当晚|当天|前一天|数十分钟|几分钟|数小时|几小时|数天|几天|连续多晚|近几天|每天数小时|随后数天"
+)
 API_USAGE: dict[str, int] = defaultdict(int)
 CONTENT_PRIORITY = {"patient_guide": 0, "rehab_contract": 1, "procedure": 2}
 CREATE_ACTION = {
@@ -460,6 +465,7 @@ def build_rehab_prompt(disease: dict[str, Any]) -> str:
 - 禁止把单一 X 线骨痂、MRI 信号、某个角度或某个数值作为负重、脱拐、跑跳、驾驶、上班的唯一开关。
 - 禁止疾病级处方化语句，例如“必须完全不负重”“必须戴支具 X 周”“术后第 X 周开始……”；这些属于具体治疗路径或 Procedure Rehab。
 - 【V3.1.1 伪精确禁令】疾病级活动解锁条件不得出现具体负重百分比（如 25%/50%/100%）、固定分钟/小时/天/周/月、固定步行距离、固定次数/组数、固定重量、固定角度或固定疼痛分值作为放行标准；把它们改写成“症状不过度反跳、功能质量稳定、结构/治疗路径允许、风险可接受”等定性条件。
+- 【V3.1.2 相对时间门槛禁令】即使没有具体数字，也不得把“次日/第二天/次晨/当晚/当天/前一天/数小时/几小时/数天/几天/几分钟/数十分钟/连续多晚/近几天/随后数天”等相对时间词当作 activity 的解锁、暂缓、退阶或负荷耐受标准。应改写为“充分休息后是否回到个人原有基线”“是否出现持续性或进行性症状反跳”“恢复趋势是否与此前可耐受活动一致”等不绑定时间点的表达。
 - typicalWindow 在 Disease Rehab Contract 中一律输出空字符串，不得填写任何时间范围。
 - 不要用“连续步行 X 分钟”“症状在 24/48 小时内恢复”“完成 X 次动作”“负重达到 X%”这类看似客观但未经个体化验证的阈值。
 - 疾病级正文尽量避免频繁使用“术后/保守治疗后”等单一路径措辞；如必须提醒路径差异，只能概括为“具体治疗方式可能附带额外限制，以治疗团队和对应 Procedure Rehab 为准”。
@@ -507,6 +513,151 @@ activities 目标是“患者真正想恢复什么”，建议 6–10 项，并�
 - 不输出 procedure rehab。
 - 对任何需要本院流程/术式/固定方式/具体阈值核对的内容，放入 reviewFlags。
 """.strip()
+
+
+
+def rehab_relative_time_hits(contract: dict[str, Any]) -> list[dict[str, str]]:
+    """Find relative-time gate language in disease-level rehab decision fields.
+
+    Warning signs are intentionally excluded: phrases such as “不要等到第二天复诊”
+    may be appropriate safety escalation language rather than a rehab unlock threshold.
+    """
+    hits: list[dict[str, str]] = []
+
+    def scan(value: Any, path: str) -> None:
+        if isinstance(value, str):
+            if RELATIVE_TIME_GATE_RE.search(value):
+                hits.append({"path": path, "text": value})
+            return
+        if isinstance(value, list):
+            for i, item in enumerate(value):
+                scan(item, f"{path}[{i}]")
+            return
+        if isinstance(value, dict):
+            for key, item in value.items():
+                scan(item, f"{path}.{key}" if path else key)
+
+    # Principle/locks/activities are the fields that can accidentally create
+    # disease-level permission or hold thresholds. Do not scan warningSigns.
+    for key in ("principle", "locks", "activities"):
+        if key in contract:
+            scan(contract[key], key)
+    return hits
+
+
+def assert_rehab_no_relative_time_gates(contract: dict[str, Any]) -> None:
+    hits = rehab_relative_time_hits(contract)
+    if hits:
+        preview = "; ".join(f"{h['path']}: {h['text'][:120]}" for h in hits[:5])
+        raise RuntimeError(f"Disease Rehab still contains relative-time gate language: {preview}")
+
+
+def latest_pending_rehab_rows() -> list[dict[str, Any]]:
+    rows = sb_get("auto_curator_drafts", {
+        "select": "id,disease_id,disease_name,payload,review_flags,model,generation_mode,status,created_at",
+        "status": "eq.pending_review",
+        "generation_mode": "like.v3_rehab_contract%",
+        "order": "created_at.asc",
+    })
+    latest: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        did = str(row.get("disease_id") or "")
+        payload = row.get("payload") or {}
+        if not did or not isinstance(payload, dict):
+            continue
+        latest[did] = row
+    return list(latest.values())
+
+
+def build_rehab_cleanup_prompt(row: dict[str, Any], hits: list[dict[str, str]]) -> str:
+    contract = row.get("payload") or {}
+    return f"""
+你是 OrthoFlow Disease Rehab Contract 的“语义清理器”，不是重新生成器。
+
+任务：只修复下面疾病级 rehab contract 中把相对时间当作解锁/暂缓/退阶标准的句子。
+疾病：{row.get('disease_name')} ({row.get('disease_id')})
+
+【只允许做的修改】
+- 将“次日/第二天/次晨/当晚/当天/前一天/数小时/几小时/数天/几天/几分钟/数十分钟/连续多晚/近几天/随后数天”等相对时间阈值，改写为不绑定具体时间点的恢复逻辑。
+- 优先使用：充分休息后是否回到个人原有基线；是否出现持续性或进行性症状反跳；恢复趋势是否与此前可耐受活动一致；症状是否持续明显高于活动前水平。
+- 保留原来的疾病特异性医学信息、活动顺序、id、title、warningSigns、reviewStatus、contentStatus。
+- 不新增治疗方案，不新增术后/保守路径，不新增负重、角度、药物、时间、次数、距离或疼痛分值。
+- 不因为这次清理去修 DDH/AS/骨肉瘤等范围结构问题；这一步只处理 relative-time gate。
+- warningSigns 中若出现“不要等到第二天”等明确的紧急就医提醒，可以保留，因为它不是功能放行阈值。
+- typicalWindow 必须继续为空字符串。
+
+【需要修复的位置】
+{json.dumps(hits, ensure_ascii=False, indent=2)}
+
+【原始 diseaseRehabContract】
+{json.dumps(contract, ensure_ascii=False, indent=2)}
+
+输出完整 Content Engine JSON：
+- contentType=rehab_contract
+- action=create_rehab_contract
+- diseaseRehabContract=清理后的完整 contract
+- reviewFlags 保留原有需要人工审核的问题；另外追加一条 low severity，说明已进行 {REHAB_CLEANUP_VERSION} 相对时间门槛清理。
+""".strip()
+
+
+def run_rehab_semantic_cleanup(schema: dict[str, Any], save_draft_enabled: bool) -> tuple[int, int, int]:
+    rows = latest_pending_rehab_rows()
+    candidates: list[tuple[dict[str, Any], list[dict[str, str]]]] = []
+    skipped_hold = 0
+    for row in rows:
+        did = str(row.get("disease_id") or "")
+        if did in REHAB_HOLD_IDS:
+            skipped_hold += 1
+            continue
+        hits = rehab_relative_time_hits(row.get("payload") or {})
+        if hits:
+            candidates.append((row, hits))
+
+    print(f"REHAB SEMANTIC CLEANUP MODE: ON — {REHAB_CLEANUP_VERSION}")
+    print(f"Latest pending rehab drafts: {len(rows)}")
+    print(f"Relative-time cleanup candidates: {len(candidates)}")
+    print(f"Structural HOLD diseases skipped: {skipped_hold}")
+
+    cleaned = 0
+    failed = 0
+    for index, (row, hits) in enumerate(candidates, start=1):
+        disease = {"id": row["disease_id"], "name": row.get("disease_name") or row["disease_id"]}
+        print("\n============================================================")
+        print(f"Cleanup progress: {index}/{len(candidates)}")
+        print(f"Target disease: {disease['name']} ({disease['id']})")
+        print(f"Relative-time hits: {len(hits)}")
+        for hit in hits[:6]:
+            print(f"  - {hit['path']}: {hit['text'][:180]}")
+        try:
+            result = deepseek_structured(build_rehab_cleanup_prompt(row, hits), schema)
+            result = normalize_and_validate(result, disease, "rehab_contract", schema)
+            contract = result.get("diseaseRehabContract") or {}
+            assert_rehab_no_relative_time_gates(contract)
+            result.setdefault("reviewFlags", []).append({
+                "field": "semantic_cleanup",
+                "issue": f"已执行 {REHAB_CLEANUP_VERSION}：移除疾病级功能放行/退阶中的相对时间门槛；仍需人工医学终审。",
+                "severity": "low",
+            })
+            artifact = save_artifact(result, disease, "rehab_contract")
+            print(f"Artifact: {artifact.relative_to(ROOT)}")
+            if save_draft_enabled:
+                save_draft(result, disease, "rehab_contract")
+                print("Saved cleaned draft to Supabase: YES")
+            else:
+                print("Saved cleaned draft to Supabase: NO (dry-run)")
+            cleaned += 1
+        except Exception as exc:
+            failed += 1
+            print(f"Semantic cleanup failed for {disease['name']}: {exc}", file=sys.stderr)
+            if is_fatal_task_error(exc):
+                raise
+            continue
+
+    print("\n================ REHAB CLEANUP SUMMARY ================")
+    print(f"Cleaned: {cleaned}")
+    print(f"Failed: {failed}")
+    print(f"Structural HOLD skipped: {skipped_hold}")
+    return cleaned, failed, skipped_hold
 
 
 def build_procedure_prompt(disease: dict[str, Any], existing: list[str], pfna_test: bool = False) -> str:
@@ -813,6 +964,18 @@ def self_test() -> None:
     ], "content_scan")
     assert phase == "patient_guide" and len(phase_tasks) == 1
 
+    # Semantic cleanup guard: relative-time gates are caught in decision fields,
+    # while urgent warning language is intentionally excluded.
+    fake_contract = {
+        "principle": "按功能和症状决定",
+        "locks": [{"id": "symptoms", "question": "活动后第二天是否更痛"}],
+        "activities": [{"id": "walk", "goal": "走路", "unlockWhen": ["休息后恢复"], "holdIf": [], "notes": "", "typicalWindow": ""}],
+        "warningSigns": ["剧痛时不要等到第二天复诊"],
+    }
+    assert len(rehab_relative_time_hits(fake_contract)) == 1
+    fake_contract["locks"][0]["question"] = "活动后充分休息仍明显高于个人原有基线吗"
+    assert rehab_relative_time_hits(fake_contract) == []
+
     # Schema sanity: minimal non-create decisions for every content type.
     for ctype in CONTENT_PRIORITY:
         validate(instance={
@@ -828,7 +991,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--mode",
-        choices=["content_scan", "patient_scan", "patient_full", "rehab_scan", "rehab_test", "procedure_scan", "pfna_test"],
+        choices=["content_scan", "patient_scan", "patient_full", "rehab_scan", "rehab_test", "rehab_cleanup", "procedure_scan", "pfna_test"],
         default="content_scan",
     )
     parser.add_argument("--save-draft", action="store_true")
@@ -843,9 +1006,19 @@ def main() -> int:
     if args.mode == "patient_full" and not args.save_draft:
         print("AUTO CURATOR FAILED: patient_full requires --save-draft to avoid an expensive unsaved full-library run.", file=sys.stderr)
         return 1
+    if args.mode == "rehab_cleanup" and not args.save_draft:
+        print("AUTO CURATOR FAILED: rehab_cleanup requires --save-draft so cleaned drafts are not lost.", file=sys.stderr)
+        return 1
 
     schema = load_json(SCHEMA_PATH)
     try:
+        if args.mode == "rehab_cleanup":
+            cleaned, failed, skipped_hold = run_rehab_semantic_cleanup(schema, save_draft_enabled=args.save_draft)
+            log_run(args.mode, None, "success" if failed == 0 else "partial_success", {
+                "cleaned": cleaned, "failed": failed, "structuralHoldSkipped": skipped_hold, "cleanupVersion": REHAB_CLEANUP_VERSION
+            })
+            return 0 if failed == 0 else 2
+
         try:
             diseases = sb_get("diseases", {"select": "id,data,view_count"})
         except RuntimeError:
