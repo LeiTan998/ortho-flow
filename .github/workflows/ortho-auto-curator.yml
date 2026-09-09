@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "Patient V3.2.2 / Disease Rehab V3.1：测试与分阶段生成"
+        description: "Patient V3.2.2 / Disease Rehab V3.1：生成、清理与 Round 2 定点修订"
         required: true
         type: choice
         default: patient_scan
@@ -15,10 +15,11 @@ on:
           - rehab_scan
           - rehab_test
           - rehab_cleanup
+          - rehab_final_fix
           - procedure_scan
           - pfna_test
       save_draft:
-        description: "是否把结果保存到 Supabase 待审核队列；patient_full / rehab_cleanup 必须勾选"
+        description: "是否把结果保存到 Supabase 待审核队列；patient_full / rehab_cleanup / rehab_final_fix 必须勾选"
         required: true
         type: boolean
         default: true

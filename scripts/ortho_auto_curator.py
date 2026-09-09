@@ -41,10 +41,105 @@ DEEPSEEK_REQUEST_TIMEOUT = int(os.getenv("DEEPSEEK_REQUEST_TIMEOUT", "180"))
 PATIENT_VERSION = "auto-curator-v3.2.2-treatment-path-safety"
 REHAB_VERSION = "auto-curator-rehab-v3.1.1-no-pseudo-precision"
 REHAB_CLEANUP_VERSION = "semantic-cleanup-v3.1.2-relative-time-gates"
+REHAB_FINAL_FIX_VERSION = "semantic-final-fixes-v3.1.3-round2"
 REHAB_HOLD_IDS = {"developmental_dysplasia_hip", "ankylosing_spondylitis", "osteosarcoma"}
+REHAB_FINAL_FIX_IDS = {
+    "acute_osteomyelitis",
+    "spinal_compression",
+    "cubital_tunnel_syndrome",
+    "onfh",
+    "femoral_shaft",
+    "itf",
+    "femoral_neck_fracture",
+    "rotator_cuff",
+    "humeral_shaft",
+    "phf",
+    "knee_oa",
+    "calcaneus",
+    "cervical_spondylosis",
+    "pelvic_fracture",
+    "hip_oa",
+    "patella_fracture",
+}
 RELATIVE_TIME_GATE_RE = re.compile(
     r"次日|第二天|第二日|次晨|当晚|当天|前一天|数十分钟|几分钟|数小时|几小时|数天|几天|连续多晚|近几天|每天数小时|随后数天"
 )
+RESIDUAL_TIME_GATE_RE = re.compile(
+    r"休息一夜|连续多日|稳定多日|超过一天|比前一天|每天早晨|一天活动|一天工作|连续多次复查"
+)
+
+REHAB_FINAL_FIX_DIRECTIVES: dict[str, list[str]] = {
+    "acute_osteomyelitis": [
+        "明确病灶部位、年龄、是否手术引流和全身感染状态可能不同；统一活动阶梯只能表达跨部位共同逻辑。",
+        "删除默认某一患肢、默认某一种固定或统一步行路径的句子；若动作只适用于某部位，明确写‘如病灶位于该部位且当前路径允许’。",
+        "疾病级正文以感染控制、结构安全、全身状态、疼痛/功能趋势和红旗为核心。",
+    ],
+    "spinal_compression": [
+        "明确创伤性、骨质疏松性和病理性椎体压缩性骨折的风险与处理可能不同。",
+        "在原则中加入：需先由治疗团队明确病因和稳定性；病理性/感染性原因不能沿用一般创伤或骨质疏松性康复逻辑。",
+        "不要在疾病级合同里给出统一支具、活动或负重处方。",
+    ],
+    "cubital_tunnel_syndrome": [
+        "患者端删除或改写 Froment 征、Wartenberg 征等专业查体名词，改成功能性描述。",
+        "把‘手术评估’等像治疗决策指令的措辞改成‘专科复评/进一步评估’，除非原句只是解释路径差异。",
+    ],
+    "onfh": [
+        "将跑跳、球类、重体力等高负荷条目从默认‘恢复/回归目标’改成‘评估是否适合’。",
+        "明确部分股骨头坏死患者即使症状改善也可能长期不适合高冲击活动，不能把高冲击作为人人必达终点。",
+    ],
+    "femoral_shaft": [
+        "清理‘休息一夜/连续多次复查’等残余相对时间或次数门槛，改成趋势/基线逻辑。",
+        "高冲击运动改成条件性的‘评估是否适合’，由愈合、力线、力量、功能和具体治疗路径共同决定。",
+    ],
+    "itf": [
+        "清理‘稳定多日’等残余时间门槛。",
+        "更突出安全转移、步行、ADL、防跌倒和整体功能；高阶运动仅作为适用人群的可选目标，不是默认终点。",
+    ],
+    "femoral_neck_fracture": [
+        "把高冲击、球类、重体力活动从默认康复终点改为‘是否适合’的条件性评估。",
+        "内固定、半髋、全髋差异只保留原则性提醒；具体体位、负重、假体限制下沉 Procedure Rehab。",
+        "患者端减少不必要的假体影像/专业术语。",
+    ],
+    "rotator_cuff": [
+        "删除把‘是否需要止痛药’或‘整夜不靠止痛药’当作核心解锁门槛的句子，改为症状趋势、功能质量和路径许可。",
+        "巨大撕裂、保守治疗、修复术、置换等差异只能条件化提示，不能合并成统一路径处方。",
+    ],
+    "humeral_shaft": [
+        "在关键上肢活动中确保桡神经功能稳定、无进行性神经缺损是重要风险条件；不要写成必须存在某一体征才允许活动。",
+        "高负荷和过顶动作必须由结构愈合、神经功能、力量和具体路径共同决定。",
+    ],
+    "phf": [
+        "‘减少吊带/支具依赖’必须改为‘如当前路径使用该保护且治疗团队允许减量’的条件性条目。",
+        "过顶活动和力量训练的具体保护边界下沉 Procedure Rehab；疾病级仅保留共同解锁逻辑。",
+    ],
+    "knee_oa": [
+        "把跑跳、球类等高冲击条目从默认‘恢复目标’改为‘是否适合’；部分患者并不需要也不适合追求该终点。",
+        "保守、截骨、UKA、TKA 的术式特异限制不要在疾病级正文展开，只引用具体路径/Procedure Rehab。",
+    ],
+    "calcaneus": [
+        "清理‘连续多日/一天活动/一天工作/超过一天/比前一天’等漏网相对时间门槛，改为充分休息后是否回到个人基线。",
+        "保留皮肤软组织和距下关节状态作为跟骨骨折特异核心风险。",
+    ],
+    "cervical_spondylosis": [
+        "明确‘颈椎病’内部风险异质：至少区分神经根症状与脊髓功能风险，不能用同一风险等级理解。",
+        "头晕不是颈椎病特异的功能解锁指标；若出现头晕，应写成需要评估其他原因/影响安全的非特异症状，而不是把它归因于颈椎病。",
+        "保留进行性无力、精细动作恶化、步态异常、大小便/会阴异常等需要及时评估的神经红旗。",
+    ],
+    "pelvic_fracture": [
+        "明确当前合同究竟适用于骨盆环骨折；若疾病名称仍为广义‘骨盆骨折’，原则中注明不同稳定型/不稳定型及合并损伤必须由具体诊断路径分流。",
+        "不要把合并脏器/泌尿生殖损伤的管理写成统一 rehab 活动处方。",
+    ],
+    "hip_oa": [
+        "删除或改写‘减少炎症因子循环’、‘沙沙摩擦痛’等不必要、可能误导的机制化或拟声症状表述。",
+        "非手术、保髋和 THA 的具体限制下沉 Procedure Rehab；疾病级只保留共同功能逻辑。",
+        "高级运动/高负荷活动改为条件性‘评估是否适合’，而不是默认康复终点。",
+    ],
+    "patella_fracture": [
+        "清理‘每天早晨’等残余时间趋势词。",
+        "删除明显不贴合髌骨骨折的‘移植’措辞；涉及结构安全时改为‘伸膝装置/骨折固定结构’等贴合语境的表述。",
+        "主动伸膝、支具减量、深屈膝和跑跳均必须以具体治疗路径允许为前提。",
+    ],
+}
 API_USAGE: dict[str, int] = defaultdict(int)
 CONTENT_PRIORITY = {"patient_guide": 0, "rehab_contract": 1, "procedure": 2}
 CREATE_ACTION = {
@@ -552,6 +647,55 @@ def assert_rehab_no_relative_time_gates(contract: dict[str, Any]) -> None:
         raise RuntimeError(f"Disease Rehab still contains relative-time gate language: {preview}")
 
 
+def rehab_residual_time_hits(contract: dict[str, Any]) -> list[dict[str, str]]:
+    """Find Round-2 residual time/count gates missed by V3.1.2.
+
+    As with the first cleanup, warningSigns are excluded so urgent escalation language
+    is not rewritten merely because it contains a time phrase.
+    """
+    hits: list[dict[str, str]] = []
+
+    def scan(value: Any, path: str) -> None:
+        if isinstance(value, str):
+            if RESIDUAL_TIME_GATE_RE.search(value):
+                hits.append({"path": path, "text": value})
+            return
+        if isinstance(value, list):
+            for i, item in enumerate(value):
+                scan(item, f"{path}[{i}]")
+            return
+        if isinstance(value, dict):
+            for key, item in value.items():
+                scan(item, f"{path}.{key}" if path else key)
+
+    for key in ("principle", "locks", "activities"):
+        if key in contract:
+            scan(contract[key], key)
+    return hits
+
+
+def assert_rehab_no_residual_time_gates(contract: dict[str, Any]) -> None:
+    hits = rehab_residual_time_hits(contract)
+    if hits:
+        preview = "; ".join(f"{h['path']}: {h['text'][:120]}" for h in hits[:5])
+        raise RuntimeError(f"Disease Rehab still contains Round-2 residual time gate language: {preview}")
+
+
+def final_fix_postcheck(disease_id: str, contract: dict[str, Any]) -> None:
+    """Cheap deterministic guards for a few Round-2 findings.
+
+    These are intentionally narrow. They do not pretend to perform medical QA; they
+    only prevent known wording regressions from being saved as a new draft.
+    """
+    assert_rehab_no_relative_time_gates(contract)
+    assert_rehab_no_residual_time_gates(contract)
+    text = json.dumps({k: contract.get(k) for k in ("principle", "locks", "activities")}, ensure_ascii=False)
+    if disease_id == "patella_fracture" and "移植" in text:
+        raise RuntimeError("Patella final-fix still contains template-pollution word: 移植")
+    if disease_id == "cubital_tunnel_syndrome" and ("Froment" in text or "Wartenberg" in text):
+        raise RuntimeError("Cubital tunnel patient-facing rehab still contains professional eponym signs")
+
+
 def latest_pending_rehab_rows() -> list[dict[str, Any]]:
     rows = sb_get("auto_curator_drafts", {
         "select": "id,disease_id,disease_name,payload,review_flags,model,generation_mode,status,created_at",
@@ -659,6 +803,104 @@ def run_rehab_semantic_cleanup(schema: dict[str, Any], save_draft_enabled: bool)
     print(f"Structural HOLD skipped: {skipped_hold}")
     return cleaned, failed, skipped_hold
 
+
+
+def build_rehab_final_fix_prompt(row: dict[str, Any]) -> str:
+    did = str(row.get("disease_id") or "")
+    contract = row.get("payload") or {}
+    directives = REHAB_FINAL_FIX_DIRECTIVES.get(did) or []
+    residual_hits = rehab_residual_time_hits(contract)
+    return f"""
+你是 OrthoFlow Disease Rehab Contract 的 Round 2 定点修订器，不是重新生成器。
+
+疾病：{row.get('disease_name')} ({did})
+修订版本：{REHAB_FINAL_FIX_VERSION}
+
+【总原则】
+- 只修复 Round 2 QA 已确认的问题；保留其余合理的疾病特异内容、活动顺序、id、title、warningSigns、reviewStatus、contentStatus。
+- 不新增治疗方案，不新增固定时间、负重百分比、角度、次数、距离、重量或疼痛评分。
+- 不把 Disease Rehab 改成 Procedure Rehab；术式、固定方式、假体、支具、负重等具体限制只能条件化提示并下沉到主管团队/对应 Procedure Rehab。
+- 高冲击、竞技运动、重体力等若并非所有患者的合理目标，必须写成“评估是否适合”，而不是默认人人最终都应恢复到该阶段。
+- 患者端优先使用功能性、可理解的表述；不必要的专业查体名词、机制化解释和模板污染词应删除。
+- typicalWindow 必须全部为空字符串。
+- warningSigns 除非与本次明确问题直接冲突，否则保持原样。
+
+【该疾病的 Round 2 定点修订要求】
+{json.dumps(directives, ensure_ascii=False, indent=2)}
+
+【扫描到的残余相对时间/次数表达】
+{json.dumps(residual_hits, ensure_ascii=False, indent=2)}
+如存在这些命中，只改写为：充分休息后是否回到个人原有基线、是否持续/进行性反跳、是否持续明显高于活动前水平等非时间绑定逻辑。
+
+【当前最新 diseaseRehabContract】
+{json.dumps(contract, ensure_ascii=False, indent=2)}
+
+输出完整 Content Engine JSON：
+- contentType=rehab_contract
+- action=create_rehab_contract
+- diseaseRehabContract=定点修订后的完整 contract
+- reviewFlags 保留仍需人工医学审核的问题，并追加一条 low severity，说明已执行 {REHAB_FINAL_FIX_VERSION}；不要声称已经完成指南/文献核验。
+""".strip()
+
+
+def run_rehab_final_fixes(schema: dict[str, Any], save_draft_enabled: bool) -> tuple[int, int, int]:
+    rows = latest_pending_rehab_rows()
+    by_id = {str(row.get("disease_id") or ""): row for row in rows}
+    candidates = [by_id[did] for did in sorted(REHAB_FINAL_FIX_IDS) if did in by_id]
+    missing = sorted(REHAB_FINAL_FIX_IDS - set(by_id))
+
+    print(f"REHAB FINAL FIX MODE: ON — {REHAB_FINAL_FIX_VERSION}")
+    print(f"Latest pending rehab drafts: {len(rows)}")
+    print(f"Round-2 targeted diseases found: {len(candidates)}/{len(REHAB_FINAL_FIX_IDS)}")
+    print(f"PASS diseases intentionally untouched: {max(0, len(rows) - len(candidates) - len(REHAB_HOLD_IDS))}")
+    print(f"Structural HOLD diseases intentionally untouched: {len(REHAB_HOLD_IDS & set(by_id))}")
+    if missing:
+        print("WARNING: targeted disease ids missing from pending rehab rows: " + ", ".join(missing), file=sys.stderr)
+
+    fixed = 0
+    failed = 0
+    for index, row in enumerate(candidates, start=1):
+        did = str(row.get("disease_id") or "")
+        disease = {"id": did, "name": row.get("disease_name") or did}
+        residual_hits = rehab_residual_time_hits(row.get("payload") or {})
+        directives = REHAB_FINAL_FIX_DIRECTIVES.get(did) or []
+        print("\n============================================================")
+        print(f"Final-fix progress: {index}/{len(candidates)}")
+        print(f"Target disease: {disease['name']} ({did})")
+        print(f"Round-2 directives: {len(directives)}")
+        print(f"Residual time/count hits before fix: {len(residual_hits)}")
+        for hit in residual_hits[:6]:
+            print(f"  - {hit['path']}: {hit['text'][:180]}")
+        try:
+            result = deepseek_structured(build_rehab_final_fix_prompt(row), schema)
+            result = normalize_and_validate(result, disease, "rehab_contract", schema)
+            contract = result.get("diseaseRehabContract") or {}
+            final_fix_postcheck(did, contract)
+            result.setdefault("reviewFlags", []).append({
+                "field": "semantic_final_fix",
+                "issue": f"已执行 {REHAB_FINAL_FIX_VERSION}：仅针对 Round 2 语义 QA 定点修订；仍需人工医学终审与必要的证据核验。",
+                "severity": "low",
+            })
+            artifact = save_artifact(result, disease, "rehab_contract")
+            print(f"Artifact: {artifact.relative_to(ROOT)}")
+            if save_draft_enabled:
+                save_draft(result, disease, "rehab_contract")
+                print("Saved final-fixed draft to Supabase: YES")
+            else:
+                print("Saved final-fixed draft to Supabase: NO (dry-run)")
+            fixed += 1
+        except Exception as exc:
+            failed += 1
+            print(f"Final-fix failed for {disease['name']}: {exc}", file=sys.stderr)
+            if is_fatal_task_error(exc):
+                raise
+            continue
+
+    print("\n================ REHAB FINAL FIX SUMMARY ================")
+    print(f"Fixed: {fixed}")
+    print(f"Failed: {failed}")
+    print(f"Missing targeted diseases: {len(missing)}")
+    return fixed, failed, len(missing)
 
 def build_procedure_prompt(disease: dict[str, Any], existing: list[str], pfna_test: bool = False) -> str:
     skill = SKILL_PATH.read_text(encoding="utf-8")
@@ -975,6 +1217,10 @@ def self_test() -> None:
     assert len(rehab_relative_time_hits(fake_contract)) == 1
     fake_contract["locks"][0]["question"] = "活动后充分休息仍明显高于个人原有基线吗"
     assert rehab_relative_time_hits(fake_contract) == []
+    fake_contract["activities"][0]["holdIf"] = ["休息一夜后仍明显更痛"]
+    assert len(rehab_residual_time_hits(fake_contract)) == 1
+    fake_contract["activities"][0]["holdIf"] = ["充分休息后仍明显高于活动前水平"]
+    assert rehab_residual_time_hits(fake_contract) == []
 
     # Schema sanity: minimal non-create decisions for every content type.
     for ctype in CONTENT_PRIORITY:
@@ -991,7 +1237,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--mode",
-        choices=["content_scan", "patient_scan", "patient_full", "rehab_scan", "rehab_test", "rehab_cleanup", "procedure_scan", "pfna_test"],
+        choices=["content_scan", "patient_scan", "patient_full", "rehab_scan", "rehab_test", "rehab_cleanup", "rehab_final_fix", "procedure_scan", "pfna_test"],
         default="content_scan",
     )
     parser.add_argument("--save-draft", action="store_true")
@@ -1006,8 +1252,8 @@ def main() -> int:
     if args.mode == "patient_full" and not args.save_draft:
         print("AUTO CURATOR FAILED: patient_full requires --save-draft to avoid an expensive unsaved full-library run.", file=sys.stderr)
         return 1
-    if args.mode == "rehab_cleanup" and not args.save_draft:
-        print("AUTO CURATOR FAILED: rehab_cleanup requires --save-draft so cleaned drafts are not lost.", file=sys.stderr)
+    if args.mode in ("rehab_cleanup", "rehab_final_fix") and not args.save_draft:
+        print(f"AUTO CURATOR FAILED: {args.mode} requires --save-draft so revised drafts are not lost.", file=sys.stderr)
         return 1
 
     schema = load_json(SCHEMA_PATH)
@@ -1018,6 +1264,13 @@ def main() -> int:
                 "cleaned": cleaned, "failed": failed, "structuralHoldSkipped": skipped_hold, "cleanupVersion": REHAB_CLEANUP_VERSION
             })
             return 0 if failed == 0 else 2
+
+        if args.mode == "rehab_final_fix":
+            fixed, failed, missing = run_rehab_final_fixes(schema, save_draft_enabled=args.save_draft)
+            log_run(args.mode, None, "success" if failed == 0 and missing == 0 else "partial_success", {
+                "fixed": fixed, "failed": failed, "missingTargetedDiseases": missing, "finalFixVersion": REHAB_FINAL_FIX_VERSION
+            })
+            return 0 if failed == 0 and missing == 0 else 2
 
         try:
             diseases = sb_get("diseases", {"select": "id,data,view_count"})
