@@ -665,7 +665,7 @@ export default function Home() {
           ) : mode === "study" ? (
             <StudyMode disease={selectedDisease} />
           ) : (
-            <ProcedureMode disease={selectedDisease} />
+            <ProcedureMode disease={selectedDisease} audience={audience} />
           )}
         </main>
 

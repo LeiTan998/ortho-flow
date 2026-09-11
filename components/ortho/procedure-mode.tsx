@@ -12,8 +12,11 @@ import type {
   ProcedureRef,
   ProcedureSurgicalStep,
 } from "@/types/orthoflow";
+import { ArrowRight, Check, Circle, ClipboardCheck, RotateCcw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
+import { trackVisitorEvent } from "@/lib/visitorAnalytics";
+import { getVisitorMetadata, type Audience } from "@/lib/visitorContext";
 
 type ProcedureTab = "overview" | "approach" | "anatomy" | "steps" | "instruments" | "imaging" | "postop";
 
@@ -352,7 +355,300 @@ function RehabActivityCard({ item }: { item: RehabActivity }) {
   );
 }
 
-export default function ProcedureMode({ disease }: { disease: DiseaseData }) {
+type ProcedureBriefItem = {
+  id: string;
+  label: string;
+  detail: string;
+  tab: ProcedureTab;
+};
+
+function firstText(...values: Array<string | undefined>) {
+  return values.find((value) => Boolean(value?.trim()))?.trim() || "";
+}
+
+function buildProcedureBrief(procedure: ProcedureData): ProcedureBriefItem[] {
+  const postopDetail = [procedure.postopFramework?.rom?.[0], procedure.postopFramework?.weightBearing?.[0]]
+    .filter(Boolean)
+    .join(" ");
+
+  const items: ProcedureBriefItem[] = [
+    {
+      id: "soft-tissue",
+      label: "软组织与全身条件",
+      detail: firstText(procedure.notSuitableScenarios?.[0], procedure.scope),
+      tab: "overview",
+    },
+    {
+      id: "ct-map",
+      label: "CT 骨折地图",
+      detail: firstText(procedure.preopImaging?.[1], procedure.preopImaging?.[0]),
+      tab: "overview",
+    },
+    {
+      id: "target-fragment",
+      label: "责任骨块与支撑方向",
+      detail: firstText(procedure.preopImaging?.[2], procedure.fixationStrategy?.[0]),
+      tab: "approach",
+    },
+    {
+      id: "approach-position",
+      label: "入路、体位与停止点",
+      detail: firstText(procedure.approachPrinciple, procedure.positioning?.[0]),
+      tab: "approach",
+    },
+    {
+      id: "reduction-sequence",
+      label: "复位顺序",
+      detail: firstText(procedure.reductionSequence?.[0], procedure.procedureSequenceNote),
+      tab: "steps",
+    },
+    {
+      id: "implant-plan",
+      label: "内固定与备用方案",
+      detail: firstText(procedure.fixationStrategy?.[1], procedure.instruments?.[0]),
+      tab: "instruments",
+    },
+    {
+      id: "imaging-plan",
+      label: "术中透视要回答什么",
+      detail: firstText(procedure.cArm?.[2], procedure.imagingPrinciple),
+      tab: "imaging",
+    },
+    {
+      id: "postop-track",
+      label: "术后监测与康复轨道",
+      detail: firstText(postopDetail, procedure.postopFramework?.monitoring?.[0]),
+      tab: "postop",
+    },
+  ];
+
+  return items.filter((item) => item.detail);
+}
+
+function PreopBriefCard({
+  procedure,
+  onNavigate,
+}: {
+  procedure: ProcedureData;
+  onNavigate: (tab: ProcedureTab) => void;
+}) {
+  const items = useMemo(() => buildProcedureBrief(procedure), [procedure]);
+  const storageKey = `orthoflow:procedure-brief:${procedure.id}`;
+  const [checkedIds, setCheckedIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(storageKey);
+      const parsed = saved ? JSON.parse(saved) : [];
+      setCheckedIds(Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : []);
+    } catch {
+      setCheckedIds([]);
+    }
+  }, [storageKey]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify(checkedIds));
+    } catch {
+      // 清单无法持久化时不影响当前页使用。
+    }
+  }, [checkedIds, storageKey]);
+
+  const completedCount = items.filter((item) => checkedIds.includes(item.id)).length;
+  const allCompleted = items.length > 0 && completedCount === items.length;
+
+  function toggleItem(id: string) {
+    setCheckedIds((current) =>
+      current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
+    );
+  }
+
+  function resetItems() {
+    setCheckedIds([]);
+  }
+
+  return (
+    <section className="rounded-[24px] border border-[var(--of-accent-border)] bg-[var(--of-accent-soft)] p-5 sm:p-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-start gap-3">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-[var(--of-accent-border)] bg-[var(--of-surface)] text-[var(--of-accent)]">
+            <ClipboardCheck size={20} aria-hidden="true" />
+          </span>
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--of-accent)]">Before incision</div>
+            <h4 className="mt-1 text-xl font-semibold text-[var(--of-text-strong)]">术前 10 分钟简报</h4>
+            <p className="mt-1 text-sm leading-6 text-[var(--of-muted)]">先把这 8 个问题在脑子里走一遍，再进入具体步骤。每项都能跳到对应模块。</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 sm:pt-1">
+          <span className="text-sm font-semibold text-[var(--of-accent)]">{completedCount}/{items.length}</span>
+          <button
+            type="button"
+            onClick={resetItems}
+            disabled={completedCount === 0}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--of-accent-border)] bg-[var(--of-surface)] px-2.5 py-1.5 text-xs font-medium text-[var(--of-muted)] transition hover:text-[var(--of-text-strong)] disabled:cursor-not-allowed disabled:opacity-40"
+            title="清空本次简报勾选"
+          >
+            <RotateCcw size={14} aria-hidden="true" />
+            重置
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-5 grid grid-cols-1 gap-2 lg:grid-cols-2">
+        {items.map((item, index) => {
+          const checked = checkedIds.includes(item.id);
+          return (
+            <div
+              key={item.id}
+              className={`flex items-start gap-3 rounded-xl border p-3 transition ${
+                checked
+                  ? "border-[var(--of-success-border)] bg-[var(--of-success-bg)]"
+                  : "border-[var(--of-border)] bg-[var(--of-surface)]"
+              }`}
+            >
+              <button
+                type="button"
+                onClick={() => toggleItem(item.id)}
+                className="mt-0.5 shrink-0 text-[var(--of-accent)]"
+                aria-label={`${checked ? "取消完成" : "标记完成"}：${item.label}`}
+              >
+                {checked ? <Check size={19} aria-hidden="true" /> : <Circle size={19} aria-hidden="true" />}
+              </button>
+              <button type="button" onClick={() => onNavigate(item.tab)} className="min-w-0 flex-1 text-left">
+                <span className={`text-sm font-semibold ${checked ? "text-[var(--of-success-text)]" : "text-[var(--of-text-strong)]"}`}>
+                  {String(index + 1).padStart(2, "0")} · {item.label}
+                </span>
+                <span className="mt-1 block text-xs leading-5 text-[var(--of-muted)]">{item.detail}</span>
+                <span className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-[var(--of-accent)]">
+                  查看模块
+                  <ArrowRight size={12} aria-hidden="true" />
+                </span>
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      {allCompleted && (
+        <div className="mt-4 rounded-xl border border-[var(--of-success-border)] bg-[var(--of-success-bg)] px-3 py-2 text-sm font-medium text-[var(--of-success-text)]">
+          简报已走完。接下来把“责任骨块、支撑方向、术中检查”再和上级术者确认一遍。
+        </div>
+      )}
+    </section>
+  );
+}
+
+type ProcedureQuickResult = "solved" | "partially_solved" | "unsolved";
+
+function ProcedureQuickFeedback({
+  disease,
+  procedure,
+  tab,
+  audience,
+}: {
+  disease: DiseaseData;
+  procedure: ProcedureData;
+  tab: ProcedureTab;
+  audience: Audience;
+}) {
+  const [status, setStatus] = useState<ProcedureQuickResult | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    setStatus(null);
+  }, [procedure.id, tab]);
+
+  async function submit(resultStatus: ProcedureQuickResult) {
+    if (submitting || status) return;
+    setSubmitting(true);
+
+    try {
+      const response = await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pageUrl: window.location.href,
+          diseaseId: disease.id,
+          diseaseName: disease.name,
+          featureName: "procedure_pro_v1",
+          userRole: "unknown",
+          taskType: "disease_learning",
+          resultStatus,
+          feedbackType: "feature",
+          severity: "low",
+          reason: resultStatus === "solved" ? "这个模块有用" : resultStatus === "partially_solved" ? "这个模块还缺一些内容" : "这个模块没有解决我的问题",
+          metadata: {
+            entry: "procedure_module_quick",
+            procedureId: procedure.id,
+            module: tab,
+            ...getVisitorMetadata(audience),
+          },
+        }),
+      });
+
+      if (!response.ok) throw new Error("提交失败");
+      setStatus(resultStatus);
+      trackVisitorEvent("procedure_module_feedback", audience, {
+        diseaseId: disease.id,
+        procedureId: procedure.id,
+        module: tab,
+        resultStatus,
+      });
+    } catch {
+      // 轻量反馈失败时不打断手术内容阅读，用户仍可使用右下角完整反馈。
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <section className="rounded-2xl border border-[var(--of-border)] bg-[var(--of-surface-muted)] px-4 py-3 sm:flex sm:items-center sm:justify-between sm:gap-4">
+      <div>
+        <p className="text-sm font-semibold text-[var(--of-text-strong)]">这个模块对你有用吗？</p>
+        <p className="mt-0.5 text-xs text-[var(--of-muted)]">只记录模块层级，不需要填写病例信息。</p>
+      </div>
+      {status ? (
+        <span className="mt-2 text-xs font-medium text-[var(--of-success-text)] sm:mt-0">已记录，谢谢。下一次会优先补“还差一点”的部分。</span>
+      ) : (
+        <div className="mt-2 flex flex-wrap gap-2 sm:mt-0">
+          <button
+            type="button"
+            disabled={submitting}
+            onClick={() => void submit("solved")}
+            className="rounded-lg border border-[var(--of-success-border)] bg-[var(--of-success-bg)] px-3 py-1.5 text-xs font-medium text-[var(--of-success-text)] transition hover:brightness-95 disabled:opacity-50"
+          >
+            有用
+          </button>
+          <button
+            type="button"
+            disabled={submitting}
+            onClick={() => void submit("partially_solved")}
+            className="rounded-lg border border-[var(--of-border)] bg-[var(--of-surface)] px-3 py-1.5 text-xs font-medium text-[var(--of-muted)] transition hover:text-[var(--of-text-strong)] disabled:opacity-50"
+          >
+            还缺内容
+          </button>
+          <button
+            type="button"
+            disabled={submitting}
+            onClick={() => void submit("unsolved")}
+            className="rounded-lg border border-[var(--of-danger-border)] bg-[var(--of-danger-bg)] px-3 py-1.5 text-xs font-medium text-[var(--of-danger-text)] transition hover:brightness-95 disabled:opacity-50"
+          >
+            没解决
+          </button>
+        </div>
+      )}
+    </section>
+  );
+}
+
+export default function ProcedureMode({
+  disease,
+  audience = "clinician",
+}: {
+  disease: DiseaseData;
+  audience?: Audience;
+}) {
   // Procedure Engine V1：前端不再写任何“某个疾病专属”的手术判断。
   // 疾病 → Procedure 的归属只由 Supabase procedureRefs / relatedDiseaseIds 决定。
   const procedures = useMemo(
@@ -538,6 +834,7 @@ export default function ProcedureMode({ disease }: { disease: DiseaseData }) {
                     <p className="text-sm leading-7 text-[var(--of-warning-text)]">这一页已经进入 Procedure 数据库，但目前主要承接原疾病模板里的手术策略。入路、解剖、具体步骤、器械和术中/术后看片只在人工整理后显示，避免批量自动生成不可靠的手术细节。</p>
                   </Card>
                 )}
+                <PreopBriefCard procedure={procedureData} onNavigate={setActiveTab} />
                 {procedureData.scope && <Card title="这个手术区解决什么"><p className="text-sm leading-7 text-[var(--of-muted)]">{procedureData.scope}</p></Card>}
                 {!!procedureData.goals?.length && <Card title="主要目标" tone="accent"><MiniList items={procedureData.goals} /></Card>}
                 <PreopToleranceCard />
@@ -675,6 +972,13 @@ export default function ProcedureMode({ disease }: { disease: DiseaseData }) {
                 {procedureData.localPracticeNote && <div className="mt-4 rounded-xl border border-[var(--of-warning-border)] bg-[var(--of-warning-bg)] p-4 text-sm leading-6 text-[var(--of-warning-text)]"><span className="font-semibold">本院实践层：</span>{procedureData.localPracticeNote}</div>}
               </details>
             )}
+
+            <ProcedureQuickFeedback
+              disease={disease}
+              procedure={procedureData}
+              tab={visibleTab}
+              audience={audience}
+            />
           </>
         )}
       </section>
