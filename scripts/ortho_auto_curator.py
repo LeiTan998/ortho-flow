@@ -99,6 +99,7 @@ REHAB_FINAL_FIX_DIRECTIVES: dict[str, list[str]] = {
         "把高冲击、球类、重体力活动从默认康复终点改为‘是否适合’的条件性评估。",
         "内固定、半髋、全髋差异只保留原则性提醒；具体体位、负重、假体限制下沉 Procedure Rehab。",
         "患者端减少不必要的假体影像/专业术语。",
+        "【特别硬要求】：严禁出现‘第二天’、‘次日’等相对时间词语；疼痛恢复标准必须改写为‘活动后髋部疼痛通过充分休息能回到活动前基线水平，不会越来越痛或持续恶化’。",
     ],
     "rotator_cuff": [
         "删除把‘是否需要止痛药’或‘整夜不靠止痛药’当作核心解锁门槛的句子，改为症状趋势、功能质量和路径许可。",
@@ -175,6 +176,11 @@ def is_fatal_full_run_error(exc: Exception) -> bool:
         "Auto Curator tables are not installed",
     )
     return any(marker in msg for marker in fatal_markers)
+
+
+def is_fatal_task_error(exc: Exception) -> bool:
+    """Check if an error during task processing is fatal."""
+    return is_fatal_full_run_error(exc)
 
 
 def need_env(name: str) -> str:
@@ -271,23 +277,11 @@ def has_patient_guide(disease: dict[str, Any]) -> bool:
 
 
 def has_rehab_contract(disease: dict[str, Any], procedures: list[dict[str, Any]]) -> bool:
-    """Disease-level Rehab is intentionally separate from Procedure rehabContract.
-
-    diseases.data.diseaseRehabContract = disease-level common recovery logic
-    procedures.data.rehabContract = procedure-specific postoperative rehab
-
-    A Procedure rehabContract must NOT make a disease look complete for the disease Rehab phase.
-    """
     contract = disease.get("diseaseRehabContract")
     return isinstance(contract, dict) and bool(contract)
 
 
 def pending_pairs() -> set[tuple[str, str]]:
-    """Return (disease_id, content_type) for V3 pending drafts.
-
-    Old V1/V2 Procedure rows do not block Patient/Rehab generation.
-    V3 uses generation_mode=v3_<content_type>.
-    """
     try:
         rows = sb_get("auto_curator_drafts", {
             "select": "disease_id,generation_mode,status",
@@ -313,11 +307,6 @@ def pending_pairs() -> set[tuple[str, str]]:
 
 
 def task_candidates(diseases: list[dict[str, Any]], procedures: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Build all missing-content tasks without using traffic/viewCount priority.
-
-    Stable ordering is by content phase, then disease name/id. Pending-review rows count
-    as already generated for scheduling purposes so repeated runs do not duplicate drafts.
-    """
     pending = pending_pairs()
     tasks: list[dict[str, Any]] = []
 
@@ -341,7 +330,6 @@ def task_candidates(diseases: list[dict[str, Any]], procedures: list[dict[str, A
             tasks.append({
                 "disease": compact_disease(d),
                 "contentType": content_type,
-                # Kept only for logs/backward compatibility; never used for ordering.
                 "viewCount": int(d.get("viewCount") or 0),
             })
 
@@ -354,11 +342,6 @@ def task_candidates(diseases: list[dict[str, Any]], procedures: list[dict[str, A
 
 
 def select_phase_tasks(all_tasks: list[dict[str, Any]], mode: str) -> tuple[str | None, list[dict[str, Any]]]:
-    """Select one phase for a run.
-
-    content_scan always finishes the whole Patient Guide phase first, then Rehab,
-    then Procedure. Explicit *_scan modes only run their requested phase.
-    """
     explicit = {
         "patient_scan": "patient_guide",
         "patient_full": "patient_guide",
@@ -379,7 +362,6 @@ def select_phase_tasks(all_tasks: list[dict[str, Any]], mode: str) -> tuple[str 
 
 
 def validate_patient_full_queue() -> int:
-    """Ensure old Patient Guide drafts cannot silently block final-version regeneration."""
     rows = sb_get("auto_curator_drafts", {
         "select": "disease_id,disease_name,payload,generation_mode,status",
         "status": "eq.pending_review",
@@ -408,9 +390,7 @@ def validate_patient_full_queue() -> int:
     return final_rows
 
 
-
 def rehab_test_tasks(diseases: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Return five cross-category disease Rehab blind-test tasks in fixed order."""
     targets = [
         ("胫骨平台骨折", ["胫骨平台"]),
         ("肩袖损伤", ["肩袖"]),
@@ -431,6 +411,7 @@ def rehab_test_tasks(diseases: list[dict[str, Any]]) -> list[dict[str, Any]]:
             raise RuntimeError(f"Rehab blind test disease not found: {display}")
         found.append({"disease": match, "contentType": "rehab_contract", "viewCount": int(match.get("viewCount") or 0)})
     return found
+
 
 def find_pfna_disease(diseases: list[dict[str, Any]]) -> dict[str, Any]:
     needles = ["股骨转子间", "股骨粗隆间", "intertrochanteric", "pertrochanteric"]
@@ -610,13 +591,7 @@ activities 目标是“患者真正想恢复什么”，建议 6–10 项，并�
 """.strip()
 
 
-
 def rehab_relative_time_hits(contract: dict[str, Any]) -> list[dict[str, str]]:
-    """Find relative-time gate language in disease-level rehab decision fields.
-
-    Warning signs are intentionally excluded: phrases such as “不要等到第二天复诊”
-    may be appropriate safety escalation language rather than a rehab unlock threshold.
-    """
     hits: list[dict[str, str]] = []
 
     def scan(value: Any, path: str) -> None:
@@ -632,8 +607,6 @@ def rehab_relative_time_hits(contract: dict[str, Any]) -> list[dict[str, str]]:
             for key, item in value.items():
                 scan(item, f"{path}.{key}" if path else key)
 
-    # Principle/locks/activities are the fields that can accidentally create
-    # disease-level permission or hold thresholds. Do not scan warningSigns.
     for key in ("principle", "locks", "activities"):
         if key in contract:
             scan(contract[key], key)
@@ -648,11 +621,6 @@ def assert_rehab_no_relative_time_gates(contract: dict[str, Any]) -> None:
 
 
 def rehab_residual_time_hits(contract: dict[str, Any]) -> list[dict[str, str]]:
-    """Find Round-2 residual time/count gates missed by V3.1.2.
-
-    As with the first cleanup, warningSigns are excluded so urgent escalation language
-    is not rewritten merely because it contains a time phrase.
-    """
     hits: list[dict[str, str]] = []
 
     def scan(value: Any, path: str) -> None:
@@ -682,11 +650,6 @@ def assert_rehab_no_residual_time_gates(contract: dict[str, Any]) -> None:
 
 
 def final_fix_postcheck(disease_id: str, contract: dict[str, Any]) -> None:
-    """Cheap deterministic guards for a few Round-2 findings.
-
-    These are intentionally narrow. They do not pretend to perform medical QA; they
-    only prevent known wording regressions from being saved as a new draft.
-    """
     assert_rehab_no_relative_time_gates(contract)
     assert_rehab_no_residual_time_gates(contract)
     text = json.dumps({k: contract.get(k) for k in ("principle", "locks", "activities")}, ensure_ascii=False)
@@ -804,7 +767,6 @@ def run_rehab_semantic_cleanup(schema: dict[str, Any], save_draft_enabled: bool)
     return cleaned, failed, skipped_hold
 
 
-
 def build_rehab_final_fix_prompt(row: dict[str, Any]) -> str:
     did = str(row.get("disease_id") or "")
     contract = row.get("payload") or {}
@@ -819,6 +781,7 @@ def build_rehab_final_fix_prompt(row: dict[str, Any]) -> str:
 【总原则】
 - 只修复 Round 2 QA 已确认的问题；保留其余合理的疾病特异内容、活动顺序、id、title、warningSigns、reviewStatus、contentStatus。
 - 不新增治疗方案，不新增固定时间、负重百分比、角度、次数、距离、重量或疼痛评分。
+- 【严禁时间门槛】：绝对严禁在 activities 的 unlockWhen 或 holdIf 中出现任何相对时间词（如“第二天”、“次日”、“次晨”、“当晚”、“当天”、“前一天”、“数小时”、“几天”、“超过一天”等）。如需表达症状恢复，统一使用“充分休息后是否回到原有基线水平”、“是否持续反跳”，绝对不能写成“持续到第二天”！
 - 不把 Disease Rehab 改成 Procedure Rehab；术式、固定方式、假体、支具、负重等具体限制只能条件化提示并下沉到主管团队/对应 Procedure Rehab。
 - 高冲击、竞技运动、重体力等若并非所有患者的合理目标，必须写成“评估是否适合”，而不是默认人人最终都应恢复到该阶段。
 - 患者端优先使用功能性、可理解的表述；不必要的专业查体名词、机制化解释和模板污染词应删除。
@@ -871,29 +834,42 @@ def run_rehab_final_fixes(schema: dict[str, Any], save_draft_enabled: bool) -> t
         print(f"Residual time/count hits before fix: {len(residual_hits)}")
         for hit in residual_hits[:6]:
             print(f"  - {hit['path']}: {hit['text'][:180]}")
-        try:
-            result = deepseek_structured(build_rehab_final_fix_prompt(row), schema)
-            result = normalize_and_validate(result, disease, "rehab_contract", schema)
-            contract = result.get("diseaseRehabContract") or {}
-            final_fix_postcheck(did, contract)
-            result.setdefault("reviewFlags", []).append({
-                "field": "semantic_final_fix",
-                "issue": f"已执行 {REHAB_FINAL_FIX_VERSION}：仅针对 Round 2 语义 QA 定点修订；仍需人工医学终审与必要的证据核验。",
-                "severity": "low",
-            })
-            artifact = save_artifact(result, disease, "rehab_contract")
-            print(f"Artifact: {artifact.relative_to(ROOT)}")
-            if save_draft_enabled:
-                save_draft(result, disease, "rehab_contract")
-                print("Saved final-fixed draft to Supabase: YES")
-            else:
-                print("Saved final-fixed draft to Supabase: NO (dry-run)")
-            fixed += 1
-        except Exception as exc:
+
+        fix_success = False
+        last_exc: Exception | None = None
+        for fix_attempt in range(2):
+            try:
+                prompt = build_rehab_final_fix_prompt(row)
+                if fix_attempt > 0 and last_exc:
+                    prompt += f"\n\n【特别警告：上一轮输出被程序拦截，原因如下，请务必彻底改正】：\n{last_exc}\n绝对不能出现‘第二天’、‘次日’等任何相对时间词，请改写为‘充分休息后回到原有基线水平’！"
+                result = deepseek_structured(prompt, schema)
+                result = normalize_and_validate(result, disease, "rehab_contract", schema)
+                contract = result.get("diseaseRehabContract") or {}
+                final_fix_postcheck(did, contract)
+                result.setdefault("reviewFlags", []).append({
+                    "field": "semantic_final_fix",
+                    "issue": f"已执行 {REHAB_FINAL_FIX_VERSION}：仅针对 Round 2 语义 QA 定点修订；仍需人工医学终审与必要的证据核验。",
+                    "severity": "low",
+                })
+                artifact = save_artifact(result, disease, "rehab_contract")
+                print(f"Artifact: {artifact.relative_to(ROOT)}")
+                if save_draft_enabled:
+                    save_draft(result, disease, "rehab_contract")
+                    print("Saved final-fixed draft to Supabase: YES")
+                else:
+                    print("Saved final-fixed draft to Supabase: NO (dry-run)")
+                fixed += 1
+                fix_success = True
+                break
+            except Exception as exc:
+                last_exc = exc
+                if is_fatal_task_error(exc):
+                    raise
+                print(f"Final-fix attempt {fix_attempt + 1}/2 failed for {disease['name']}: {exc}", file=sys.stderr)
+
+        if not fix_success:
             failed += 1
-            print(f"Final-fix failed for {disease['name']}: {exc}", file=sys.stderr)
-            if is_fatal_task_error(exc):
-                raise
+            print(f"Final-fix permanently failed for {disease['name']}: {last_exc}", file=sys.stderr)
             continue
 
     print("\n================ REHAB FINAL FIX SUMMARY ================")
@@ -901,6 +877,7 @@ def run_rehab_final_fixes(schema: dict[str, Any], save_draft_enabled: bool) -> t
     print(f"Failed: {failed}")
     print(f"Missing targeted diseases: {len(missing)}")
     return fixed, failed, len(missing)
+
 
 def build_procedure_prompt(disease: dict[str, Any], existing: list[str], pfna_test: bool = False) -> str:
     skill = SKILL_PATH.read_text(encoding="utf-8")
@@ -1206,8 +1183,6 @@ def self_test() -> None:
     ], "content_scan")
     assert phase == "patient_guide" and len(phase_tasks) == 1
 
-    # Semantic cleanup guard: relative-time gates are caught in decision fields,
-    # while urgent warning language is intentionally excluded.
     fake_contract = {
         "principle": "按功能和症状决定",
         "locks": [{"id": "symptoms", "question": "活动后第二天是否更痛"}],
@@ -1222,7 +1197,6 @@ def self_test() -> None:
     fake_contract["activities"][0]["holdIf"] = ["充分休息后仍明显高于活动前水平"]
     assert rehab_residual_time_hits(fake_contract) == []
 
-    # Schema sanity: minimal non-create decisions for every content type.
     for ctype in CONTENT_PRIORITY:
         validate(instance={
             "contentType": ctype,
@@ -1335,7 +1309,6 @@ def main() -> int:
                 first = normalize_and_validate(first, disease, content_type, schema)
 
                 result = first
-                # Second pass only for drafts that may become actual content.
                 if first.get("action") == CREATE_ACTION[content_type] and not args.no_review:
                     result = review_and_revise(first, disease, content_type, schema)
                     result = normalize_and_validate(result, disease, content_type, schema)

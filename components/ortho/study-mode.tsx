@@ -261,7 +261,8 @@ export function StudyMode({ disease }: { disease: DiseaseData }) {
     ? disease.commonImages
     : [];
 
-
+  // 优先读取全新的疾病级功能回归合同
+  const rehabContract = (disease as any).diseaseRehabContract;
 
   const hasSummary = Boolean(
     summary.typicalPatients ||
@@ -604,30 +605,142 @@ export function StudyMode({ disease }: { disease: DiseaseData }) {
           </StudySection>
         )}
 
-        {Array.isArray(disease.rehabPlan) && disease.rehabPlan.length > 0 && (
-          <StudySection number="7" title="康复方案">
-            <div className="space-y-3">
-              {disease.rehabPlan.map((item: any, index: number) => (
-                <details
-                  key={index}
-                  className="group rounded-2xl border border-[var(--of-border)] bg-[var(--of-surface)] shadow-[0_12px_36px_rgba(39,76,79,.06)]"
-                >
-                  <summary className="cursor-pointer list-none px-4 py-4">
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="text-sm font-semibold text-[var(--of-accent)]">
-                        {item.phase}
-                      </div>
-                      <span className="text-xs text-[var(--of-muted)] group-open:hidden">展开</span>
-                      <span className="hidden text-xs text-[var(--of-muted)] group-open:inline">收起</span>
-                    </div>
-                  </summary>
-                  <div className="border-t border-[var(--of-border)] px-4 py-4 text-sm leading-6 text-[var(--of-muted)]">
-                    {item.content}
+        {/* 核心改动：优先展示全新【疾病级功能回归合同】，未升级的旧病则自动降级展示老版 rehabPlan */}
+        {rehabContract ? (
+          <StudySection number="7" title={rehabContract.title || "功能回归与康复合同"}>
+            <div className="space-y-6">
+              {/* 原则卡片 */}
+              {rehabContract.principle && (
+                <div className="rounded-2xl border border-[var(--of-accent-border)] bg-[var(--of-accent-soft)] p-5 leading-7 text-[var(--of-text-strong)] shadow-sm">
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--of-accent)]">
+                    康复回归总原则（去日历化）
                   </div>
-                </details>
-              ))}
+                  <p className="text-sm font-medium">{rehabContract.principle}</p>
+                </div>
+              )}
+
+              {/* 康复五把锁 */}
+              {Array.isArray(rehabContract.locks) && rehabContract.locks.length > 0 && (
+                <div className="rounded-2xl border border-[var(--of-border)] bg-[var(--of-surface)] p-5 shadow-sm">
+                  <h4 className="mb-4 text-base font-semibold text-[var(--of-text-strong)]">
+                    评估五把锁（不以时间单方面放行）
+                  </h4>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                    {rehabContract.locks.map((lock: any, idx: number) => (
+                      <div
+                        key={lock.id || idx}
+                        className="flex flex-col justify-between rounded-xl border border-[var(--of-border)] bg-[var(--of-surface-muted)] p-3.5"
+                      >
+                        <div>
+                          <div className="text-xs font-bold uppercase tracking-wider text-[var(--of-accent)]">
+                            Lock {idx + 1} · {lock.name}
+                          </div>
+                          <p className="mt-2 text-xs leading-5 text-[var(--of-muted)]">
+                            {lock.question}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 功能活动回归清单 */}
+              {Array.isArray(rehabContract.activities) && rehabContract.activities.length > 0 && (
+                <div className="space-y-4">
+                  <h4 className="text-base font-semibold text-[var(--of-text-strong)]">
+                    目标功能活动回归条件
+                  </h4>
+                  <div className="grid grid-cols-1 gap-4">
+                    {rehabContract.activities.map((act: any, idx: number) => (
+                      <div
+                        key={act.id || idx}
+                        className="rounded-2xl border border-[var(--of-border)] bg-[var(--of-surface)] p-5 shadow-sm transition hover:border-[#A4D7DD]"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <h5 className="text-base font-semibold text-[var(--of-text-strong)]">
+                            {idx + 1}. {act.name}
+                          </h5>
+                          {act.goal && (
+                            <span className="text-xs font-medium text-[var(--of-muted)]">
+                              目标：{act.goal}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+                          {/* 何时允许尝试 */}
+                          {Array.isArray(act.unlockWhen) && act.unlockWhen.length > 0 && (
+                            <div className="rounded-xl border border-[var(--of-success-border)] bg-[var(--of-success-bg)] p-3.5 text-xs leading-6 text-[var(--of-success-text)]">
+                              <div className="mb-1.5 font-bold">✓ 什么时候可以尝试（准入条件）：</div>
+                              <ul className="list-inside list-disc space-y-1">
+                                {act.unlockWhen.map((item: string, uIdx: number) => (
+                                  <li key={uIdx}>{item}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
+                          {/* 何时必须暂停 */}
+                          {Array.isArray(act.holdIf) && act.holdIf.length > 0 && (
+                            <div className="rounded-xl border border-[var(--of-warning-border)] bg-[var(--of-warning-bg)] p-3.5 text-xs leading-6 text-[var(--of-warning-text)]">
+                              <div className="mb-1.5 font-bold">⚠ 什么时候必须暂停退阶（止损信号）：</div>
+                              <ul className="list-inside list-disc space-y-1">
+                                {act.holdIf.map((item: string, hIdx: number) => (
+                                  <li key={hIdx}>{item}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+
+                        {act.notes && (
+                          <div className="mt-3 rounded-lg bg-[var(--of-surface-muted)] px-3 py-2 text-xs text-[var(--of-muted)]">
+                            <span className="font-semibold text-[var(--of-accent)]">临床提示：</span>
+                            {act.notes}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 红旗警示 */}
+              {Array.isArray(rehabContract.warningSigns) && rehabContract.warningSigns.length > 0 && (
+                <InfoCard title="红旗警示 · 出现以下情况应立即复诊" tone="danger">
+                  <BulletList items={rehabContract.warningSigns} />
+                </InfoCard>
+              )}
             </div>
           </StudySection>
+        ) : (
+          /* 老版本康复方案（兜底保底） */
+          Array.isArray(disease.rehabPlan) && disease.rehabPlan.length > 0 && (
+            <StudySection number="7" title="康复方案（历史阶段参考）">
+              <div className="space-y-3">
+                {disease.rehabPlan.map((item: any, index: number) => (
+                  <details
+                    key={index}
+                    className="group rounded-2xl border border-[var(--of-border)] bg-[var(--of-surface)] shadow-[0_12px_36px_rgba(39,76,79,.06)]"
+                  >
+                    <summary className="cursor-pointer list-none px-4 py-4">
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="text-sm font-semibold text-[var(--of-accent)]">
+                          {item.phase}
+                        </div>
+                        <span className="text-xs text-[var(--of-muted)] group-open:hidden">展开</span>
+                        <span className="hidden text-xs text-[var(--of-muted)] group-open:inline">收起</span>
+                      </div>
+                    </summary>
+                    <div className="border-t border-[var(--of-border)] px-4 py-4 text-sm leading-6 text-[var(--of-muted)]">
+                      {item.content}
+                    </div>
+                  </details>
+                ))}
+              </div>
+            </StudySection>
+          )
         )}
       </div>
 
@@ -638,6 +751,7 @@ export function StudyMode({ disease }: { disease: DiseaseData }) {
         !hasCommonImages &&
         decisionSteps.length === 0 &&
         !disease.surgeryTable &&
+        !rehabContract &&
         (!Array.isArray(disease.rehabPlan) || disease.rehabPlan.length === 0) && (
           <div className="rounded-2xl border border-[var(--of-border)] bg-[var(--of-surface)] p-6 text-[var(--of-muted)] shadow-sm">
             该疾病暂无学习内容。
@@ -848,5 +962,4 @@ function BulletList({ items }: { items: string[] }) {
   );
 }
 
-
-export default StudyMode
+export default StudyMode;
