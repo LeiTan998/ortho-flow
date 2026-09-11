@@ -1,0 +1,43 @@
+OrthoFlow 升级包安装与发布说明（电脑小白版）
+
+一、如果你拿到的是 ZIP 升级包
+1. 双击 ZIP，确认第一层能直接看到 app、components、supabase、package.json 等文件。
+2. 在 ZIP 里按 Ctrl+A，再按 Ctrl+C。
+3. 打开电脑里的真实仓库：文档\GitHub\ortho-flow。
+4. 在仓库空白处按 Ctrl+V；出现同名文件提示时选择“替换目标中的文件”。
+5. 不要删除仓库原有的 .git、.env.local、node_modules 和 .next。
+
+二、上传网站代码
+1. 打开 GitHub Desktop，确认左上角 Current repository 是 ortho-flow。
+2. 左侧应出现 changed files；如果仍是 0 changed files，说明文件没有复制到正确仓库。
+3. 在左下角 Summary 填本次升级说明，Description 可以留空。
+4. 点击 Commit to main。
+5. 点击顶部 Push origin。
+6. 顶部重新变成 Fetch origin，表示 GitHub 上传完成。
+
+三、等待网站部署
+1. OrthoFlow 已连接 Vercel，Push 后通常会自动部署。
+2. 等待约 3–5 分钟后打开 https://www.orthoflow.com.cn/。
+3. 按 Ctrl+F5 强制刷新，避免浏览器继续显示旧版本。
+
+四、更新 Supabase 医学内容
+1. 打开升级说明指定的 supabase/*.sql 文件。
+2. 按 Ctrl+A、Ctrl+C。
+3. 登录 https://supabase.com/dashboard 并进入 OrthoFlow 项目。
+4. 打开 SQL Editor，点击 New query，粘贴 SQL。
+5. 点击 Run；看到绿色 Success 才算完成。
+6. 不要把 .env.local、Supabase key、Vercel token 或任何密码发给别人。
+
+五、本次“详细手术入路 V3”需要运行的 SQL
+supabase/04_tibial_plateau_orif_gold_v1.sql
+
+六、上线检查
+1. 搜索“胫骨平台骨折”，进入“手术 Pro”。
+2. 打开“切口与显露”。
+3. 前外侧入路应有 5 个逐步显露步骤。
+4. 后内侧入路应有 5 个逐步显露步骤。
+5. 联合入路应有 4 个协同步骤。
+6. 每一步应能看到：具体动作、到位标志、保护结构、停止点。
+
+重要边界
+手术内容用于正规医疗人员的学习、术前讨论和复盘，不能替代上级医师现场带教、患者个体化评估、本院规范和术者对解剖层次的直接确认。

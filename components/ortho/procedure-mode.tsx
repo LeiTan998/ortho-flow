@@ -44,7 +44,7 @@ type ProcedureDataWithRehab = ProcedureData & { rehabContract?: RehabContract };
 const TAB_LABELS: Array<{ id: ProcedureTab; label: string; hint: string }> = [
   { id: "overview", label: "手术概览", hint: "先知道有哪些方案" },
   { id: "approach", label: "入路怎么选", hint: "目标 → 暴露 → 通道" },
-  { id: "anatomy", label: "解剖与危险区", hint: "一层层认结构" },
+  { id: "anatomy", label: "切口与显露", hint: "定位 → 切开 → 分层" },
   { id: "steps", label: "手术怎么做", hint: "术前心智排练" },
   { id: "instruments", label: "器械与内固定", hint: "什么时候拿什么" },
   { id: "imaging", label: "术中 / 术后看片", hint: "做完怎么看" },
@@ -217,13 +217,74 @@ function AnatomyCard({ approach }: { approach: ProcedureApproachGuide }) {
       <div className="flex items-center justify-between gap-3">
         <div>
           <h4 className="text-lg font-semibold text-[var(--of-text-strong)]">{approach.name}</h4>
-          <p className="mt-1 text-xs text-[var(--of-muted)]">目标不是背解剖名词，而是知道“下一层应该看到什么”。</p>
+          <p className="mt-1 text-xs leading-5 text-[var(--of-muted)]">按体表定位、切口、逐层显露和关闭顺序阅读；每一步都要知道“应该看到什么”和“什么情况下必须停”。</p>
         </div>
         {approach.humanReviewRequired && <span className="rounded-full border border-[var(--of-danger-border)] bg-[var(--of-danger-bg)] px-2 py-1 text-[10px] font-semibold text-[var(--of-danger-text)]">高风险区域</span>}
       </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {!!approach.positioning?.length && (
+          <section className="rounded-lg border border-[var(--of-border)] bg-[var(--of-surface-muted)] p-4">
+            <div className="mb-3 text-xs font-semibold text-[var(--of-accent)]">体位与术野准备</div>
+            <MiniList items={approach.positioning} />
+          </section>
+        )}
+        {!!approach.surfaceLandmarks?.length && (
+          <section className="rounded-lg border border-[var(--of-border)] bg-[var(--of-surface-muted)] p-4">
+            <div className="mb-3 text-xs font-semibold text-[var(--of-accent)]">先摸到并画出的标志</div>
+            <MiniList items={approach.surfaceLandmarks} />
+          </section>
+        )}
+      </div>
+
+      {!!approach.incisionPlan?.length && (
+        <section className="mt-4 rounded-lg border border-[var(--of-accent-border)] bg-[var(--of-accent-soft)] p-4">
+          <div className="mb-3 text-xs font-semibold text-[var(--of-accent)]">切口怎么画</div>
+          <MiniList items={approach.incisionPlan} />
+        </section>
+      )}
+
+      {!!approach.approachSteps?.length && (
+        <section className="mt-4">
+          <div className="mb-3 text-sm font-semibold text-[var(--of-text-strong)]">逐步显露</div>
+          <ol className="space-y-3">
+            {approach.approachSteps.map((step, index) => (
+              <li key={`${approach.id}-${index}`} className="rounded-lg border border-[var(--of-border)] bg-[var(--of-surface-muted)] p-4">
+                <div className="flex items-start gap-3">
+                  <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-[var(--of-accent-border)] bg-[var(--of-accent-soft)] text-xs font-semibold text-[var(--of-accent)]">{index + 1}</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="font-semibold text-[var(--of-text-strong)]">{step.title}</div>
+                    {!!step.action?.length && <div className="mt-2"><MiniList items={step.action} /></div>}
+                    {step.expectedView && (
+                      <p className="mt-3 border-l-2 border-[var(--of-accent)] pl-3 text-sm leading-6 text-[var(--of-muted)]">
+                        <span className="font-semibold text-[var(--of-text-strong)]">到位标志：</span>{step.expectedView}
+                      </p>
+                    )}
+                    <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
+                      {!!step.protect?.length && (
+                        <div>
+                          <div className="mb-2 text-xs font-semibold text-[var(--of-text-strong)]">要保护</div>
+                          <MiniList items={step.protect} />
+                        </div>
+                      )}
+                      {!!step.stopIf?.length && (
+                        <div className="rounded-lg border border-[var(--of-danger-border)] bg-[var(--of-danger-bg)] p-3">
+                          <div className="mb-2 text-xs font-semibold text-[var(--of-danger-text)]">出现这些情况先停</div>
+                          <MiniList items={step.stopIf} tone="danger" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[1.15fr_.85fr]">
         <div className="rounded-xl border border-[var(--of-border)] bg-[var(--of-surface-muted)] p-4">
-          <div className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--of-accent)]">从浅到深</div>
+          <div className="mb-3 text-xs font-semibold text-[var(--of-accent)]">从浅到深的层次复盘</div>
           <ol className="space-y-3">
             {(approach.anatomyLayers || []).map((layer, index) => (
               <li key={index} className="flex gap-3 text-sm leading-6 text-[var(--of-muted)]">
@@ -234,9 +295,24 @@ function AnatomyCard({ approach }: { approach: ProcedureApproachGuide }) {
           </ol>
         </div>
         <div className="rounded-xl border border-[var(--of-danger-border)] bg-[var(--of-danger-bg)] p-4">
-          <div className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--of-danger-text)]">危险结构 / 停止点</div>
+          <div className="mb-3 text-xs font-semibold text-[var(--of-danger-text)]">危险结构 / 停止点</div>
           <MiniList items={approach.dangerStructures} tone="danger" />
         </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {!!approach.completionChecks?.length && (
+          <section className="rounded-lg border border-[var(--of-accent-border)] bg-[var(--of-accent-soft)] p-4">
+            <div className="mb-3 text-xs font-semibold text-[var(--of-accent)]">显露做到什么算够</div>
+            <MiniList items={approach.completionChecks} />
+          </section>
+        )}
+        {!!approach.closureChecks?.length && (
+          <section className="rounded-lg border border-[var(--of-border)] bg-[var(--of-surface-muted)] p-4">
+            <div className="mb-3 text-xs font-semibold text-[var(--of-text-strong)]">关闭与离台前复核</div>
+            <MiniList items={approach.closureChecks} />
+          </section>
+        )}
       </div>
     </article>
   );

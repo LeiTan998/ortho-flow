@@ -58,13 +58,27 @@ export type ApproachRef = {
   stopPoint?: string;
 };
 
+export type ProcedureApproachStep = {
+  title: string;
+  action?: string[];
+  expectedView?: string;
+  protect?: string[];
+  stopIf?: string[];
+};
+
 export type ProcedureApproachGuide = {
   id: string;
   name: string;
   englishName?: string;
   bestFor?: string[];
   exposes?: string[];
+  positioning?: string[];
+  surfaceLandmarks?: string[];
+  incisionPlan?: string[];
   anatomyLayers?: string[];
+  approachSteps?: ProcedureApproachStep[];
+  completionChecks?: string[];
+  closureChecks?: string[];
   dangerStructures?: string[];
   limitations?: string[];
   keyPoint?: string;
