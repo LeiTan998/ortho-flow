@@ -1,3 +1,6 @@
+import type { Audience } from "@/lib/visitorContext";
+import { getVisitorMetadata } from "@/lib/visitorContext";
+
 const SEARCH_ANALYTICS_OPTOUT_KEY = "orthoflow-search-analytics-optout";
 const SEARCH_SESSION_KEY = "orthoflow-feedback-session-id";
 
@@ -32,7 +35,8 @@ export function isSearchAnalyticsOptedOut(): boolean {
 export async function logSearchClick(
   query: string,
   resultCount: number,
-  clickedDiseaseId: string
+  clickedDiseaseId: string,
+  audience: Audience,
 ) {
   if (typeof window === "undefined") return;
   if (isSearchAnalyticsOptedOut()) return;
@@ -49,6 +53,10 @@ export async function logSearchClick(
         clickedDiseaseId,
         pageUrl: window.location.href,
         sessionId: getSearchSessionId(),
+        metadata: {
+          ...getVisitorMetadata(audience),
+          event: "search_click",
+        },
       }),
     });
   } catch (error) {

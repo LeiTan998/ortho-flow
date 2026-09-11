@@ -10,6 +10,13 @@ import ProcedureMode from "@/components/ortho/procedure-mode";
 import { ThemeToggle } from "@/components/theme-toggle";
 import type { DiseaseData, DiseaseMode } from "@/types/orthoflow";
 import { isSearchAnalyticsOptedOut, logSearchClick } from "@/lib/searchAnalytics";
+import {
+  getInitialAudience,
+  setAudiencePreference,
+  type Audience,
+} from "@/lib/visitorContext";
+import { trackVisitorEvent } from "@/lib/visitorAnalytics";
+import VisitorIntentCapture from "@/components/feedback/VisitorIntentCapture";
 
 
 const CATALOG_CACHE_KEY = "orthoflow:disease-catalog:v1";
@@ -112,12 +119,29 @@ export default function Home() {
   const [loadError, setLoadError] = useState("");
   const [diseaseLoadError, setDiseaseLoadError] = useState("");
   const [openingDiseaseId, setOpeningDiseaseId] = useState<string | null>(null);
-  const [audience, setAudience] = useState<"patient" | "clinician">("clinician");
+  const [audience, setAudience] = useState<Audience>("patient");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedDisease, setSelectedDisease] = useState<DiseaseData | null>(null);
   const [mode, setMode] = useState<DiseaseMode>("work");
   const [currentStep, setCurrentStep] = useState(0);
   const homeBackgroundRef = useRef<HTMLDivElement | null>(null);
+  const entryTrackedRef = useRef(false);
+
+  useEffect(() => {
+    const initialAudience = getInitialAudience();
+    setAudience(initialAudience);
+
+    if (!entryTrackedRef.current) {
+      entryTrackedRef.current = true;
+      trackVisitorEvent("visitor_entry", initialAudience);
+    }
+  }, []);
+
+  const chooseAudience = (nextAudience: Audience) => {
+    setAudience(nextAudience);
+    setAudiencePreference(nextAudience);
+    trackVisitorEvent("audience_selected", nextAudience);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -189,10 +213,11 @@ export default function Home() {
       setCurrentStep(0);
       setMode("work");
       setSearchTerm("");
+      trackVisitorEvent("disease_opened", audience);
 
       if (!countAsSearch || analyticsOptedOut) return;
 
-      void logSearchClick(queryAtClick, resultCountAtClick, disease.id);
+      void logSearchClick(queryAtClick, resultCountAtClick, disease.id, audience);
 
       // 浏览计数失败不能阻塞用户进入疾病页面。
       void supabase
@@ -301,7 +326,7 @@ export default function Home() {
               <button
                 type="button"
                 onClick={() => {
-                  setAudience("clinician");
+                  chooseAudience("clinician");
                   setMode("study");
                 }}
                 className="shrink-0 rounded-xl border border-[var(--of-border)] bg-[var(--of-surface)] px-3 py-2 text-xs font-medium text-[var(--of-muted)] transition hover:border-[#A4D7DD] hover:bg-[var(--of-accent-soft)] hover:text-[var(--of-text)]"
@@ -449,14 +474,14 @@ export default function Home() {
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
                   type="button"
-                  onClick={() => { setAudience("clinician"); setMode("study"); }}
+                  onClick={() => { chooseAudience("clinician"); setMode("study"); }}
                   className="rounded-xl bg-gradient-to-r from-[#20A6B9] to-[#4B8EE8] px-4 py-2.5 text-sm font-medium text-white"
                 >
                   看查体与影像学习
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setAudience("clinician"); setMode("procedure"); }}
+                  onClick={() => { chooseAudience("clinician"); setMode("procedure"); }}
                   className="rounded-xl border border-[var(--of-border)] bg-[var(--of-surface-muted)] px-4 py-2.5 text-sm font-medium text-[var(--of-text-strong)]"
                 >
                   看手术 Pro
@@ -469,7 +494,7 @@ export default function Home() {
             本页面用于健康教育和就诊前理解，不提供在线个体化诊断，也不能替代线下专科查体与医生判断。
           </footer>
 
-          <FeedbackHub diseaseId={selectedDisease.id} diseaseName={selectedDisease.name} searchQuery="" searchResultCount={0} />
+            <FeedbackHub diseaseId={selectedDisease.id} diseaseName={selectedDisease.name} audience={audience} searchQuery="" searchResultCount={0} />
         </div>
       );
     }
@@ -486,7 +511,7 @@ export default function Home() {
                 <div className="truncate text-xs text-[var(--of-muted)]">患者理解模式 · Patient Guide</div>
               </div>
             </div>
-            <button type="button" onClick={() => { setAudience("clinician"); setMode("study"); }} className="shrink-0 rounded-xl border border-[var(--of-border)] bg-[var(--of-surface)] px-3 py-2 text-xs font-medium text-[var(--of-muted)] transition hover:border-[#A4D7DD] hover:bg-[var(--of-accent-soft)] hover:text-[var(--of-text)]">医生 / 学习端</button>
+            <button type="button" onClick={() => { chooseAudience("clinician"); setMode("study"); }} className="shrink-0 rounded-xl border border-[var(--of-border)] bg-[var(--of-surface)] px-3 py-2 text-xs font-medium text-[var(--of-muted)] transition hover:border-[#A4D7DD] hover:bg-[var(--of-accent-soft)] hover:text-[var(--of-text)]">医生 / 学习端</button>
           </div>
         </header>
         <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
@@ -511,7 +536,7 @@ export default function Home() {
           </div>
         </main>
         <footer className="mx-auto max-w-5xl px-4 pb-8 pt-2 text-center text-[11px] leading-5 text-[var(--of-muted)] sm:px-6">本页面用于健康教育和就诊前理解，不能替代线下专科查体与医生判断。</footer>
-        <FeedbackHub diseaseId={selectedDisease.id} diseaseName={selectedDisease.name} searchQuery="" searchResultCount={0} />
+        <FeedbackHub diseaseId={selectedDisease.id} diseaseName={selectedDisease.name} audience={audience} searchQuery="" searchResultCount={0} />
       </div>
     );
   }
@@ -759,7 +784,7 @@ export default function Home() {
           <div className="mt-6 grid max-w-2xl gap-3 sm:grid-cols-2">
             <button
               type="button"
-              onClick={() => setAudience("patient")}
+                onClick={() => chooseAudience("patient")}
               className={`rounded-2xl border p-4 text-left transition ${
                 audience === "patient"
                   ? "border-[#7BC9D4] bg-[var(--of-accent-soft)] shadow-[0_12px_34px_rgba(32,166,185,.10)]"
@@ -773,7 +798,7 @@ export default function Home() {
             </button>
             <button
               type="button"
-              onClick={() => setAudience("clinician")}
+                onClick={() => chooseAudience("clinician")}
               className={`rounded-2xl border p-4 text-left transition ${
                 audience === "clinician"
                   ? "border-[#7BC9D4] bg-[var(--of-accent-soft)] shadow-[0_12px_34px_rgba(32,166,185,.10)]"
@@ -786,6 +811,8 @@ export default function Home() {
               </div>
             </button>
           </div>
+
+          <VisitorIntentCapture onAudienceChange={chooseAudience} />
 
           <div className="mt-8 rounded-[30px] border border-[#D2E1DE] bg-[var(--of-surface)] p-3 shadow-[0_22px_70px_rgba(39,76,79,.10)] backdrop-blur-2xl sm:p-4">
             <div className="relative flex items-center rounded-[22px] border border-[var(--of-border)] bg-[var(--of-surface-muted)] shadow-inner shadow-[#AFC6C2]/25 transition focus-within:border-[#8DCCD4] focus-within:ring-4 focus-within:ring-cyan-300/10">
@@ -1042,6 +1069,7 @@ export default function Home() {
       <FeedbackHub
         diseaseId={null}
         diseaseName={null}
+        audience={audience}
         searchQuery={searchTerm}
         searchResultCount={filteredDiseases.length}
       />

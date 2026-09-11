@@ -25,6 +25,18 @@ function normalizeQuery(query: string): string {
   return query.toLocaleLowerCase("zh-CN").replace(/\s+/g, " ").trim()
 }
 
+function cleanMetadata(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {}
+
+  try {
+    const serialized = JSON.stringify(value)
+    if (serialized.length > 5000) return {}
+    return JSON.parse(serialized) as Record<string, unknown>
+  } catch {
+    return {}
+  }
+}
+
 export async function POST(request: Request) {
   const contentLength = Number(request.headers.get("content-length") ?? "0")
   if (contentLength > 15_000) {
@@ -54,10 +66,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "用户身份选项无效" }, { status: 400 })
   }
 
-  const metadata =
-    body.metadata && typeof body.metadata === "object" && !Array.isArray(body.metadata)
-      ? body.metadata
-      : {}
+  const metadata = cleanMetadata(body.metadata)
 
   const sessionId = cleanString(body.sessionId, 120)
   const clickedDiseaseId = cleanString(body.clickedDiseaseId, 120)

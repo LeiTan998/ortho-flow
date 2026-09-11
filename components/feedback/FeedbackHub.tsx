@@ -2,6 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react"
 import { toast } from "sonner"
+import {
+  getVisitorMetadata,
+  type Audience,
+} from "@/lib/visitorContext"
+import { trackVisitorEvent } from "@/lib/visitorAnalytics"
 
 type UserRole =
   | "unknown"
@@ -43,6 +48,7 @@ interface FeedbackHubProps {
   diseaseName?: string | null
   searchQuery?: string
   searchResultCount?: number
+  audience?: Audience
   className?: string
 }
 
@@ -115,6 +121,8 @@ const REASON_OPTIONS = [
   "内容太复杂",
   "内容可能有错误",
   "页面操作困难",
+  "暂时没有解决我的问题",
+  "还需要更多信息",
   "其他",
 ]
 
@@ -178,10 +186,13 @@ export default function FeedbackHub({
   diseaseName,
   searchQuery = "",
   searchResultCount,
+  audience = "patient",
   className = "",
 }: FeedbackHubProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isQuickSubmitting, setIsQuickSubmitting] = useState(false)
+  const [quickFeedbackStatus, setQuickFeedbackStatus] = useState<ResultStatus | null>(null)
   const [draft, setDraft] = useState<FeedbackDraft>(INITIAL_DRAFT)
   const lastSearchSignature = useRef("")
 
@@ -206,18 +217,30 @@ export default function FeedbackHub({
         resultCount: searchResultCount,
         pageUrl: getPageUrl(),
         sessionId: getSessionId(),
+        metadata: {
+          ...getVisitorMetadata(audience),
+          event: "search_input",
+        },
       }).catch(() => undefined)
     }, 1000)
 
     return () => window.clearTimeout(timer)
-  }, [searchQuery, searchResultCount, searchSignature])
+  }, [audience, searchQuery, searchResultCount, searchSignature])
+
+  useEffect(() => {
+    setQuickFeedbackStatus(null)
+  }, [diseaseId])
 
   function openForm(patch: Partial<FeedbackDraft> = {}) {
     setDraft({ ...INITIAL_DRAFT, ...patch })
     setIsOpen(true)
+    trackVisitorEvent("feedback_opened", audience)
   }
 
-  async function submitSolved() {
+  async function submitQuickResult(resultStatus: ResultStatus, reason?: string) {
+    if (isQuickSubmitting || quickFeedbackStatus) return
+    setIsQuickSubmitting(true)
+
     try {
       await postJson("/api/feedback", {
         pageUrl: getPageUrl(),
@@ -226,14 +249,27 @@ export default function FeedbackHub({
         featureName: "feedback_v1_1",
         userRole: "unknown",
         taskType: "disease_learning",
-        resultStatus: "solved",
+        resultStatus,
         feedbackType: "content",
         severity: "low",
-        metadata: { entry: "page_resolution" },
+        metadata: {
+          ...getVisitorMetadata(audience),
+          entry: "page_resolution",
+          quick: true,
+        },
+        reason: reason || null,
       })
       toast.success("已记录，谢谢")
+      trackVisitorEvent("feedback_submitted", audience, {
+        feedbackType: "content",
+        resultStatus,
+        quick: true,
+      })
+      setQuickFeedbackStatus(resultStatus)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "提交失败")
+    } finally {
+      setIsQuickSubmitting(false)
     }
   }
 
@@ -262,6 +298,7 @@ export default function FeedbackHub({
           searchQuery: searchQuery.trim() || null,
           searchResultCount:
             typeof searchResultCount === "number" ? searchResultCount : null,
+          ...getVisitorMetadata(audience),
         },
       })
 
@@ -277,10 +314,18 @@ export default function FeedbackHub({
           userRole: draft.userRole,
           pageUrl: getPageUrl(),
           sessionId: getSessionId(),
+          metadata: {
+            ...getVisitorMetadata(audience),
+            event: "search_request",
+          },
         }).catch(() => undefined)
       }
 
       toast.success("反馈已提交")
+      trackVisitorEvent("feedback_submitted", audience, {
+        feedbackType: draft.feedbackType,
+        resultStatus: draft.resultStatus || "none",
+      })
       setIsOpen(false)
       setDraft(INITIAL_DRAFT)
     } catch (error) {
@@ -327,49 +372,76 @@ export default function FeedbackHub({
             <p className="text-sm font-semibold text-[var(--of-text-strong)]">这页解决你的问题了吗？</p>
             <p className="mt-0.5 text-xs text-[var(--of-muted)]">反馈用于决定下一步优先改什么。</p>
           </div>
-          <div className="mt-3 flex flex-wrap items-center gap-2 sm:mt-0 sm:justify-end">
-            <button
-              type="button"
-              onClick={() => void submitSolved()}
-              className="rounded-lg border border-[var(--of-success-border)] bg-[var(--of-success-bg)] px-3 py-1.5 text-xs font-medium text-[var(--of-success-text)] transition hover:brightness-95 dark:hover:brightness-110"
-            >
-              解决了
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                openForm({
-                  resultStatus: "partially_solved",
-                  feedbackType: "content",
-                })
-              }
-              className="rounded-lg border border-[var(--of-border)] bg-[var(--of-surface-muted)] px-3 py-1.5 text-xs font-medium text-[var(--of-muted)] transition hover:text-[var(--of-text-strong)]"
-            >
-              部分解决
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                openForm({ resultStatus: "unsolved", feedbackType: "content" })
-              }
-              className="rounded-lg border border-[var(--of-danger-border)] bg-[var(--of-danger-bg)] px-3 py-1.5 text-xs font-medium text-[var(--of-danger-text)] transition hover:brightness-95 dark:hover:brightness-110"
-            >
-              没解决
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                openForm({
-                  feedbackType: "medical_error",
-                  severity: "high",
-                  taskType: "disease_learning",
-                })
-              }
-              className="px-1 py-1.5 text-xs font-medium text-[var(--of-muted)] underline-offset-4 hover:text-[var(--of-danger-text)] hover:underline"
-            >
-              纠错 / 举报
-            </button>
-          </div>
+          {quickFeedbackStatus ? (
+            <div className="mt-3 flex flex-wrap items-center gap-3 sm:mt-0 sm:justify-end">
+              <span className="text-xs font-medium text-[var(--of-success-text)]">已记录，谢谢</span>
+              <button
+                type="button"
+                onClick={() =>
+                  openForm({
+                    resultStatus: quickFeedbackStatus,
+                    feedbackType: "content",
+                  })
+                }
+                className="text-xs font-medium text-[var(--of-muted)] underline-offset-4 hover:text-[var(--of-text-strong)] hover:underline"
+              >
+                补充具体原因
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  openForm({
+                    feedbackType: "medical_error",
+                    severity: "high",
+                    taskType: "disease_learning",
+                  })
+                }
+                className="text-xs font-medium text-[var(--of-muted)] underline-offset-4 hover:text-[var(--of-danger-text)] hover:underline"
+              >
+                纠错 / 举报
+              </button>
+            </div>
+          ) : (
+            <div className="mt-3 flex flex-wrap items-center gap-2 sm:mt-0 sm:justify-end">
+              <button
+                type="button"
+                disabled={isQuickSubmitting}
+                onClick={() => void submitQuickResult("solved")}
+                className="rounded-lg border border-[var(--of-success-border)] bg-[var(--of-success-bg)] px-3 py-1.5 text-xs font-medium text-[var(--of-success-text)] transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:brightness-110"
+              >
+                有帮助
+              </button>
+              <button
+                type="button"
+                disabled={isQuickSubmitting}
+                onClick={() => void submitQuickResult("partially_solved", "还需要更多信息")}
+                className="rounded-lg border border-[var(--of-border)] bg-[var(--of-surface-muted)] px-3 py-1.5 text-xs font-medium text-[var(--of-muted)] transition hover:text-[var(--of-text-strong)] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                还差一点
+              </button>
+              <button
+                type="button"
+                disabled={isQuickSubmitting}
+                onClick={() => void submitQuickResult("unsolved", "暂时没有解决我的问题")}
+                className="rounded-lg border border-[var(--of-danger-border)] bg-[var(--of-danger-bg)] px-3 py-1.5 text-xs font-medium text-[var(--of-danger-text)] transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:brightness-110"
+              >
+                没帮助
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  openForm({
+                    feedbackType: "medical_error",
+                    severity: "high",
+                    taskType: "disease_learning",
+                  })
+                }
+                className="px-1 py-1.5 text-xs font-medium text-[var(--of-muted)] underline-offset-4 hover:text-[var(--of-danger-text)] hover:underline"
+              >
+                纠错 / 举报
+              </button>
+            </div>
+          )}
         </section>
       )}
 

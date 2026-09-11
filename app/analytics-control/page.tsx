@@ -71,6 +71,13 @@ export default function AnalyticsControlPage() {
         >
           ← 返回 OrthoFlow
         </a>
+
+        <a
+          href="/feedback-dashboard"
+          className="mt-3 block text-sm text-cyan-300 hover:text-cyan-200"
+        >
+          查看反馈与用户分析 →
+        </a>
       </section>
     </main>
   )

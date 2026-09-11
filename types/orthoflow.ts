@@ -132,6 +132,10 @@ export type ProcedureData = {
   relatedDiseaseIds?: string[];
   summary?: string;
   scope?: string;
+  approachPrinciple?: string;
+  procedureSequenceNote?: string;
+  instrumentPrinciple?: string;
+  imagingPrinciple?: string;
   goals?: string[];
   indicationScenarios?: string[];
   notSuitableScenarios?: string[];
