@@ -17,6 +17,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { trackVisitorEvent } from "@/lib/visitorAnalytics";
 import { getVisitorMetadata, type Audience } from "@/lib/visitorContext";
+import { TibialPlateauAnterolateralFigure } from "@/components/ortho/approach-anatomy-figure";
 
 type ProcedureTab = "overview" | "approach" | "anatomy" | "steps" | "instruments" | "imaging" | "postop";
 
@@ -221,6 +222,8 @@ function AnatomyCard({ approach }: { approach: ProcedureApproachGuide }) {
         </div>
         {approach.humanReviewRequired && <span className="rounded-full border border-[var(--of-danger-border)] bg-[var(--of-danger-bg)] px-2 py-1 text-[10px] font-semibold text-[var(--of-danger-text)]">高风险区域</span>}
       </div>
+
+      {approach.id === "anterolateral_tibial_plateau" && <TibialPlateauAnterolateralFigure />}
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         {!!approach.positioning?.length && (
